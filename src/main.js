@@ -5,6 +5,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 const status = document.querySelector('#status');
 const canvasContainer = document.querySelector('#game-canvas');
 const wallPath = './assets/wall.glb';
+const wallRotationY = Math.PI / 2;
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -96,6 +97,7 @@ async function loadWall(scene, world) {
   const wall = gltf.scene;
   wall.name = 'collision-wall';
   wall.position.set(0, 0, 0);
+  wall.rotation.y = wallRotationY;
 
   wall.traverse((child) => {
     if (child.isMesh) {
