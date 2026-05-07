@@ -8,13 +8,59 @@
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
           "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/rapier.es.js"
         }
       }
     </script>
     <script type="module" src="./src/main.js"></script>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        overflow: hidden;
+        color: #eef3ff;
+        background: #111722;
+        font-family: system-ui, sans-serif;
+      }
+
+      #game-canvas {
+        position: fixed;
+        inset: 0;
+      }
+
+      main,
+      footer {
+        position: relative;
+        z-index: 1;
+        width: fit-content;
+        margin: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem;
+        background: rgb(9 13 22 / 72%);
+        backdrop-filter: blur(6px);
+      }
+
+      h1 {
+        margin-block: 0 0.5rem;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      footer {
+        position: fixed;
+        bottom: 0;
+      }
+
+      a {
+        color: #9bd1ff;
+      }
+    </style>
   </head>
   <body>
+    <div id="game-canvas" aria-label="3D game view"></div>
     <main>
       <h1>Shooting Game</h1>
       <p id="status">three.js と Rapier Physics を読み込み中...</p>
