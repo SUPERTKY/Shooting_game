@@ -4,8 +4,15 @@ import RAPIER from '@dimforge/rapier3d-compat';
 
 const status = document.querySelector('#status');
 const canvasContainer = document.querySelector('#game-canvas');
+const ringUi = document.querySelector('#target-ring-ui');
+const ringImage = document.querySelector('#target-ring-image');
+const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const wallPath = './assets/wall.glb';
+const gunPath = './assets/gun.glb';
 const wallRotationY = Math.PI / 2;
+const ringTraceAreaScale = 0.8;
+const gunViewPosition = new THREE.Vector3(0.45, -0.42, -1.2);
+const gunViewMaxSize = 0.65;
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -91,6 +98,37 @@ function frameObjectInView(object, camera) {
   camera.updateProjectionMatrix();
 }
 
+async function loadGun(camera) {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(gunPath);
+  const gunModel = gltf.scene;
+  const gun = new THREE.Group();
+  gun.name = 'camera-gun';
+
+  gunModel.updateWorldMatrix(true, true);
+  const gunBox = new THREE.Box3().setFromObject(gunModel);
+  const gunCenter = gunBox.getCenter(new THREE.Vector3());
+  const gunSize = gunBox.getSize(new THREE.Vector3());
+  const gunMaxSize = Math.max(gunSize.x, gunSize.y, gunSize.z);
+  const gunScale = gunMaxSize > 0 ? gunViewMaxSize / gunMaxSize : 1;
+
+  gunModel.position.sub(gunCenter);
+  gun.add(gunModel);
+  gun.scale.setScalar(gunScale);
+  gun.position.copy(gunViewPosition);
+
+  gun.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  camera.add(gun);
+
+  return { gun, gunModel };
+}
+
 async function loadWall(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(wallPath);
@@ -125,6 +163,55 @@ async function loadWall(scene, world) {
   return { wall, wallBody, wallCollider, wallBox };
 }
 
+function syncRingTraceArea() {
+  const imageRect = ringImage.getBoundingClientRect();
+  const traceSide = Math.min(imageRect.width, imageRect.height) * ringTraceAreaScale;
+
+  ringTraceArea.style.width = `${traceSide}px`;
+  ringTraceArea.style.height = `${traceSide}px`;
+}
+
+function setupRingUi() {
+  const syncWhenReady = () => requestAnimationFrame(syncRingTraceArea);
+
+  if (ringImage.complete) {
+    syncWhenReady();
+  } else {
+    ringImage.addEventListener('load', syncWhenReady, { once: true });
+  }
+
+  window.addEventListener('resize', syncWhenReady);
+
+  const tracedPoints = [];
+  const updateTracePoint = (event) => {
+    const areaRect = ringTraceArea.getBoundingClientRect();
+    tracedPoints.push({
+      x: event.clientX - areaRect.left,
+      y: event.clientY - areaRect.top,
+    });
+  };
+
+  ringTraceArea.addEventListener('pointerdown', (event) => {
+    tracedPoints.length = 0;
+    ringTraceArea.setPointerCapture(event.pointerId);
+    updateTracePoint(event);
+  });
+
+  ringTraceArea.addEventListener('pointermove', (event) => {
+    if (ringTraceArea.hasPointerCapture(event.pointerId)) {
+      updateTracePoint(event);
+    }
+  });
+
+  return {
+    element: ringUi,
+    image: ringImage,
+    traceArea: ringTraceArea,
+    tracedPoints,
+    syncTraceArea: syncWhenReady,
+  };
+}
+
 async function init() {
   await RAPIER.init();
 
@@ -135,13 +222,16 @@ async function init() {
   const world = new RAPIER.World(gravity);
   const renderer = createRenderer();
   const camera = createCamera();
+  scene.add(camera);
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデルと当たり判定を読み込み中...';
+  status.textContent = '壁モデル、銃モデル、UIリングを読み込み中...';
+  const ring = setupRingUi();
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
-  status.textContent = 'assets/wall.glb を空間に配置し、当たり判定とライトを追加しました。';
+  const gun = await loadGun(camera);
+  status.textContent = 'assets/gun.glb をカメラ前に配置し、リングのなぞれる範囲を0.8倍にしました。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -172,10 +262,12 @@ async function init() {
     lights,
     ground,
     wall,
+    gun,
+    ring,
   };
 }
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデルまたはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、銃モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
