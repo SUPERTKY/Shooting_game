@@ -50,10 +50,32 @@
         position: absolute;
         top: 50%;
         left: 50%;
+        display: grid;
+        place-items: center;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
         transform: translate(-50%, -50%);
         pointer-events: auto;
         touch-action: none;
-        cursor: crosshair;
+        cursor: grab;
+      }
+
+      #target-ring-trace-area:active {
+        cursor: grabbing;
+      }
+
+      #target-ring-trace-area:focus-visible {
+        outline: 3px solid #9bd1ff;
+        outline-offset: 0.35rem;
+      }
+
+      #ring-shoot-button-image {
+        width: 58%;
+        height: auto;
+        pointer-events: none;
+        user-select: none;
       }
 
       #shoot-button {
@@ -114,9 +136,11 @@
   </head>
   <body>
     <div id="game-canvas" aria-label="3D game view"></div>
-    <div id="target-ring-ui" aria-label="リングのなぞれる場所">
+    <div id="target-ring-ui" aria-label="リング内の射撃と照準操作">
       <img id="target-ring-image" src="./image/ring.png" alt="Target ring" draggable="false" />
-      <div id="target-ring-trace-area" aria-label="リングの当たり判定"></div>
+      <button id="target-ring-trace-area" type="button" aria-label="ドラッグして銃の向きを変える">
+        <img id="ring-shoot-button-image" src="./image/shoot.png" alt="" draggable="false" />
+      </button>
     </div>
     <button id="shoot-button" type="button" aria-label="撃つ">
       <img id="shoot-button-image" src="./image/shoot.png" alt="" draggable="false" />
