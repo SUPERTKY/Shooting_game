@@ -14,6 +14,8 @@ const ringTraceAreaScale = 0.8;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunViewMaxSize = 0.65;
+const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
+const gunForwardPointRadius = 0.04;
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -99,6 +101,23 @@ function frameObjectInView(object, camera) {
   camera.updateProjectionMatrix();
 }
 
+function createGunForwardPoint(gunScale) {
+  const markerScale = gunScale > 0 ? gunScale : 1;
+  const pointGeometry = new THREE.SphereGeometry(gunForwardPointRadius / markerScale, 24, 16);
+  const pointMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff315f,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95,
+  });
+  const forwardPoint = new THREE.Mesh(pointGeometry, pointMaterial);
+  forwardPoint.name = 'gun-forward-point';
+  forwardPoint.position.copy(gunForwardPointOffset).divideScalar(markerScale);
+  forwardPoint.renderOrder = 10;
+
+  return forwardPoint;
+}
+
 async function loadGun(camera) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(gunPath);
@@ -126,9 +145,12 @@ async function loadGun(camera) {
     }
   });
 
+  const forwardPoint = createGunForwardPoint(gunScale);
+  gun.add(forwardPoint);
+
   camera.add(gun);
 
-  return { gun, gunModel };
+  return { gun, gunModel, forwardPoint };
 }
 
 async function loadWall(scene, world) {
@@ -233,7 +255,7 @@ async function init() {
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
   const gun = await loadGun(camera);
-  status.textContent = 'assets/gun.glb を-90度回転し、少し低い位置へ調整しました。';
+  status.textContent = 'assets/gun.glb の前に追従ポイントを可視化しました。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
