@@ -11,9 +11,15 @@ const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
-const gunViewPosition = new THREE.Vector3(0, 0, -1.2);
-const gunViewRotation = new THREE.Euler(0, Math.PI / 2, 0);
+const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
+const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
+const gunAimLimits = {
+  maxYaw: THREE.MathUtils.degToRad(28),
+  maxPitch: THREE.MathUtils.degToRad(18),
+};
 const gunViewMaxSize = 0.65;
+const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
+const gunForwardPointRadius = 0.04;
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -94,9 +100,26 @@ function frameObjectInView(object, camera) {
   const maxSize = Math.max(size.x, size.y, size.z);
   const distance = maxSize / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
 
-  camera.position.set(center.x, center.y + maxSize * 0.35, center.z + distance * 1.8);
+  camera.position.set(center.x, center.y + maxSize * 0.35, center.z + distance * 1.25);
   camera.lookAt(center.x, center.y + size.y * 0.15, center.z);
   camera.updateProjectionMatrix();
+}
+
+function createGunForwardPoint(gunScale) {
+  const markerScale = gunScale > 0 ? gunScale : 1;
+  const pointGeometry = new THREE.SphereGeometry(gunForwardPointRadius / markerScale, 24, 16);
+  const pointMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff315f,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95,
+  });
+  const forwardPoint = new THREE.Mesh(pointGeometry, pointMaterial);
+  forwardPoint.name = 'gun-forward-point';
+  forwardPoint.position.copy(gunForwardPointOffset).divideScalar(markerScale);
+  forwardPoint.renderOrder = 10;
+
+  return forwardPoint;
 }
 
 async function loadGun(camera) {
@@ -126,9 +149,12 @@ async function loadGun(camera) {
     }
   });
 
+  const forwardPoint = createGunForwardPoint(gunScale);
+  gun.add(forwardPoint);
+
   camera.add(gun);
 
-  return { gun, gunModel };
+  return { gun, gunModel, forwardPoint };
 }
 
 async function loadWall(scene, world) {
@@ -184,13 +210,33 @@ function setupRingUi() {
 
   window.addEventListener('resize', syncWhenReady);
 
+  const aimDirection = new THREE.Vector2(0, 0);
   const tracedPoints = [];
   const updateTracePoint = (event) => {
     const areaRect = ringTraceArea.getBoundingClientRect();
+    const centerX = areaRect.width / 2;
+    const centerY = areaRect.height / 2;
+    const localX = event.clientX - areaRect.left;
+    const localY = event.clientY - areaRect.top;
+    const radius = Math.max(Math.min(areaRect.width, areaRect.height) / 2, 1);
+    const nextAim = new THREE.Vector2((localX - centerX) / radius, (localY - centerY) / radius);
+
+    if (nextAim.length() > 1) {
+      nextAim.normalize();
+    }
+
+    aimDirection.copy(nextAim);
     tracedPoints.push({
-      x: event.clientX - areaRect.left,
-      y: event.clientY - areaRect.top,
+      x: localX,
+      y: localY,
+      aimX: aimDirection.x,
+      aimY: aimDirection.y,
     });
+  };
+  const finishAim = (event) => {
+    if (ringTraceArea.hasPointerCapture(event.pointerId)) {
+      ringTraceArea.releasePointerCapture(event.pointerId);
+    }
   };
 
   ringTraceArea.addEventListener('pointerdown', (event) => {
@@ -205,13 +251,29 @@ function setupRingUi() {
     }
   });
 
+  ringTraceArea.addEventListener('pointerup', finishAim);
+  ringTraceArea.addEventListener('pointercancel', finishAim);
+
   return {
     element: ringUi,
     image: ringImage,
     traceArea: ringTraceArea,
+    aimDirection,
+    aimLimits: gunAimLimits,
     tracedPoints,
     syncTraceArea: syncWhenReady,
   };
+}
+
+function applyGunAim(gun, aimDirection) {
+  const yawOffset = aimDirection.x * gunAimLimits.maxYaw;
+  const pitchOffset = -aimDirection.y * gunAimLimits.maxPitch;
+
+  gun.gun.rotation.set(
+    gunViewRotation.x + pitchOffset,
+    gunViewRotation.y + yawOffset,
+    gunViewRotation.z,
+  );
 }
 
 async function init() {
@@ -233,7 +295,7 @@ async function init() {
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
   const gun = await loadGun(camera);
-  status.textContent = 'assets/gun.glb をカメラ真正面に配置し、90度回転しました。';
+  status.textContent = 'リング内のボタンをドラッグすると、上限付きで銃がその方向へ回転します。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -247,6 +309,7 @@ async function init() {
     const delta = Math.min(clock.getDelta(), 0.05);
     world.timestep = delta;
     world.step();
+    applyGunAim(gun, ring.aimDirection);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
@@ -266,6 +329,7 @@ async function init() {
     wall,
     gun,
     ring,
+    aimLimits: gunAimLimits,
   };
 }
 
