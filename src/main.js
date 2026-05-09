@@ -11,7 +11,7 @@ const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
-const gunViewPosition = new THREE.Vector3(0, 0, -1.2);
+const gunViewPosition = new THREE.Vector3(0, 0, -0.55);
 const gunViewRotation = new THREE.Euler(0, Math.PI / 2, 0);
 const gunViewMaxSize = 0.65;
 const clock = new THREE.Clock();
@@ -94,7 +94,7 @@ function frameObjectInView(object, camera) {
   const maxSize = Math.max(size.x, size.y, size.z);
   const distance = maxSize / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
 
-  camera.position.set(center.x, center.y + maxSize * 0.35, center.z + distance * 1.8);
+  camera.position.set(center.x, center.y + maxSize * 0.35, center.z + distance * 1.25);
   camera.lookAt(center.x, center.y + size.y * 0.15, center.z);
   camera.updateProjectionMatrix();
 }
@@ -233,7 +233,7 @@ async function init() {
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
   const gun = await loadGun(camera);
-  status.textContent = 'assets/gun.glb をカメラ真正面に配置し、90度回転しました。';
+  status.textContent = 'assets/gun.glb をさらにカメラ側へ寄せ、UIリングを右に配置しました。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
