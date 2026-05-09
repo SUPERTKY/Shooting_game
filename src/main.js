@@ -11,7 +11,8 @@ const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
-const gunViewPosition = new THREE.Vector3(0.45, -0.42, -1.2);
+const gunViewPosition = new THREE.Vector3(0, 0, -1.2);
+const gunViewRotation = new THREE.Euler(0, Math.PI / 2, 0);
 const gunViewMaxSize = 0.65;
 const clock = new THREE.Clock();
 
@@ -116,6 +117,7 @@ async function loadGun(camera) {
   gun.add(gunModel);
   gun.scale.setScalar(gunScale);
   gun.position.copy(gunViewPosition);
+  gun.rotation.copy(gunViewRotation);
 
   gun.traverse((child) => {
     if (child.isMesh) {
@@ -231,7 +233,7 @@ async function init() {
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
   const gun = await loadGun(camera);
-  status.textContent = 'assets/gun.glb をカメラ前に配置し、リングのなぞれる範囲を0.8倍にしました。';
+  status.textContent = 'assets/gun.glb をカメラ真正面に配置し、90度回転しました。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
