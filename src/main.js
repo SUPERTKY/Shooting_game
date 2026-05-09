@@ -8,6 +8,7 @@ const ringUi = document.querySelector('#target-ring-ui');
 const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const wallPath = './assets/wall.glb';
+const ringPath = './image/ring.png';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.6;
 const clock = new THREE.Clock();
