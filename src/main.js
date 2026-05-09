@@ -4,12 +4,13 @@ import RAPIER from '@dimforge/rapier3d-compat';
 
 const status = document.querySelector('#status');
 const canvasContainer = document.querySelector('#game-canvas');
+const ringUi = document.querySelector('#target-ring-ui');
+const ringImage = document.querySelector('#target-ring-image');
+const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const wallPath = './assets/wall.glb';
 const ringPath = './image/ring.png';
 const wallRotationY = Math.PI / 2;
-const ringHeight = 1.8;
-const ringPositionOffsetRatio = new THREE.Vector2(0.16, -0.12);
-const ringColliderScale = 0.6;
+const ringTraceAreaScale = 0.6;
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -129,45 +130,52 @@ async function loadWall(scene, world) {
   return { wall, wallBody, wallCollider, wallBox };
 }
 
-async function loadRing(scene, world, wallBox) {
-  const texture = await new THREE.TextureLoader().loadAsync(ringPath);
-  texture.colorSpace = THREE.SRGBColorSpace;
+function syncRingTraceArea() {
+  const imageRect = ringImage.getBoundingClientRect();
+  const traceSide = Math.min(imageRect.width, imageRect.height) * ringTraceAreaScale;
 
-  const imageAspect = texture.image.width / texture.image.height;
-  const ringWidth = ringHeight * imageAspect;
-  const ringGeometry = new THREE.PlaneGeometry(ringWidth, ringHeight);
-  const ringMaterial = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    depthWrite: false,
+  ringTraceArea.style.width = `${traceSide}px`;
+  ringTraceArea.style.height = `${traceSide}px`;
+}
+
+function setupRingUi() {
+  const syncWhenReady = () => requestAnimationFrame(syncRingTraceArea);
+
+  if (ringImage.complete) {
+    syncWhenReady();
+  } else {
+    ringImage.addEventListener('load', syncWhenReady, { once: true });
+  }
+
+  window.addEventListener('resize', syncWhenReady);
+
+  const tracedPoints = [];
+  const updateTracePoint = (event) => {
+    const areaRect = ringTraceArea.getBoundingClientRect();
+    tracedPoints.push({
+      x: event.clientX - areaRect.left,
+      y: event.clientY - areaRect.top,
+    });
+  };
+
+  ringTraceArea.addEventListener('pointerdown', (event) => {
+    tracedPoints.length = 0;
+    ringTraceArea.setPointerCapture(event.pointerId);
+    updateTracePoint(event);
   });
-  const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-  ring.name = 'target-ring';
 
-  const wallSize = wallBox.getSize(new THREE.Vector3());
-  const wallCenter = wallBox.getCenter(new THREE.Vector3());
-  ring.position.set(
-    wallCenter.x + wallSize.x * ringPositionOffsetRatio.x,
-    wallCenter.y + wallSize.y * ringPositionOffsetRatio.y,
-    wallBox.max.z + 0.05,
-  );
-  scene.add(ring);
-
-  const colliderSide = Math.min(ringWidth, ringHeight) * ringColliderScale;
-  const ringBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.fixed().setTranslation(ring.position.x, ring.position.y, ring.position.z),
-  );
-  const ringCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(colliderSide / 2, colliderSide / 2, 0.05),
-    ringBody,
-  );
-  ringCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+  ringTraceArea.addEventListener('pointermove', (event) => {
+    if (ringTraceArea.hasPointerCapture(event.pointerId)) {
+      updateTracePoint(event);
+    }
+  });
 
   return {
-    ring,
-    ringBody,
-    ringCollider,
-    colliderSide,
+    element: ringUi,
+    image: ringImage,
+    traceArea: ringTraceArea,
+    tracedPoints,
+    syncTraceArea: syncWhenReady,
   };
 }
 
@@ -184,11 +192,11 @@ async function init() {
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデル、リング画像、当たり判定を読み込み中...';
+  status.textContent = '壁モデルとUIリングを読み込み中...';
+  const ring = setupRingUi();
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
-  const ring = await loadRing(scene, world, wall.wallBox);
-  status.textContent = 'image/ring.png を画面中央から少し右下へ配置し、0.6倍サイズの正方形当たり判定を追加しました。';
+  status.textContent = 'image/ring.png をUIとして画面中央から少し右下へ配置し、0.6倍サイズのなぞれる範囲を追加しました。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -225,5 +233,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデル、リング画像、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
