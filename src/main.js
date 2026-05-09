@@ -5,7 +5,11 @@ import RAPIER from '@dimforge/rapier3d-compat';
 const status = document.querySelector('#status');
 const canvasContainer = document.querySelector('#game-canvas');
 const wallPath = './assets/wall.glb';
+const ringPath = './image/ring.png';
 const wallRotationY = Math.PI / 2;
+const ringHeight = 1.8;
+const ringPositionOffsetRatio = new THREE.Vector2(0.16, -0.12);
+const ringColliderScale = 0.6;
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -125,6 +129,48 @@ async function loadWall(scene, world) {
   return { wall, wallBody, wallCollider, wallBox };
 }
 
+async function loadRing(scene, world, wallBox) {
+  const texture = await new THREE.TextureLoader().loadAsync(ringPath);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  const imageAspect = texture.image.width / texture.image.height;
+  const ringWidth = ringHeight * imageAspect;
+  const ringGeometry = new THREE.PlaneGeometry(ringWidth, ringHeight);
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+  });
+  const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+  ring.name = 'target-ring';
+
+  const wallSize = wallBox.getSize(new THREE.Vector3());
+  const wallCenter = wallBox.getCenter(new THREE.Vector3());
+  ring.position.set(
+    wallCenter.x + wallSize.x * ringPositionOffsetRatio.x,
+    wallCenter.y + wallSize.y * ringPositionOffsetRatio.y,
+    wallBox.max.z + 0.05,
+  );
+  scene.add(ring);
+
+  const colliderSide = Math.min(ringWidth, ringHeight) * ringColliderScale;
+  const ringBody = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(ring.position.x, ring.position.y, ring.position.z),
+  );
+  const ringCollider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(colliderSide / 2, colliderSide / 2, 0.05),
+    ringBody,
+  );
+  ringCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+
+  return {
+    ring,
+    ringBody,
+    ringCollider,
+    colliderSide,
+  };
+}
+
 async function init() {
   await RAPIER.init();
 
@@ -138,10 +184,11 @@ async function init() {
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデルと当たり判定を読み込み中...';
+  status.textContent = '壁モデル、リング画像、当たり判定を読み込み中...';
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
-  status.textContent = 'assets/wall.glb を空間に配置し、当たり判定とライトを追加しました。';
+  const ring = await loadRing(scene, world, wall.wallBox);
+  status.textContent = 'image/ring.png を画面中央から少し右下へ配置し、0.6倍サイズの正方形当たり判定を追加しました。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -172,10 +219,11 @@ async function init() {
     lights,
     ground,
     wall,
+    ring,
   };
 }
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデルまたはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、リング画像、またはライブラリの読み込みに失敗しました。';
 });
