@@ -56,6 +56,32 @@
         cursor: crosshair;
       }
 
+      #shoot-button {
+        position: fixed;
+        top: calc(50% + 8vh);
+        left: calc(50% - 8vw);
+        z-index: 3;
+        width: min(18vmin, 140px);
+        padding: 0;
+        border: 0;
+        background: transparent;
+        transform: translate(-50%, -50%);
+        cursor: pointer;
+        user-select: none;
+      }
+
+      #shoot-button:focus-visible {
+        outline: 3px solid #9bd1ff;
+        outline-offset: 0.35rem;
+      }
+
+      #shoot-button-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        pointer-events: none;
+      }
+
       main,
       footer {
         position: relative;
@@ -92,6 +118,9 @@
       <img id="target-ring-image" src="./image/ring.png" alt="Target ring" draggable="false" />
       <div id="target-ring-trace-area" aria-label="リングの当たり判定"></div>
     </div>
+    <button id="shoot-button" type="button" aria-label="撃つ">
+      <img id="shoot-button-image" src="./image/shoot.png" alt="" draggable="false" />
+    </button>
     <main>
       <h1>Shooting Game</h1>
       <p id="status">three.js と Rapier Physics を読み込み中...</p>
