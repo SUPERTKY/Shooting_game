@@ -4,8 +4,12 @@ import RAPIER from '@dimforge/rapier3d-compat';
 
 const status = document.querySelector('#status');
 const canvasContainer = document.querySelector('#game-canvas');
+const ringUi = document.querySelector('#target-ring-ui');
+const ringImage = document.querySelector('#target-ring-image');
+const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const wallPath = './assets/wall.glb';
 const wallRotationY = Math.PI / 2;
+const ringTraceAreaScale = 0.6;
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -125,6 +129,55 @@ async function loadWall(scene, world) {
   return { wall, wallBody, wallCollider, wallBox };
 }
 
+function syncRingTraceArea() {
+  const imageRect = ringImage.getBoundingClientRect();
+  const traceSide = Math.min(imageRect.width, imageRect.height) * ringTraceAreaScale;
+
+  ringTraceArea.style.width = `${traceSide}px`;
+  ringTraceArea.style.height = `${traceSide}px`;
+}
+
+function setupRingUi() {
+  const syncWhenReady = () => requestAnimationFrame(syncRingTraceArea);
+
+  if (ringImage.complete) {
+    syncWhenReady();
+  } else {
+    ringImage.addEventListener('load', syncWhenReady, { once: true });
+  }
+
+  window.addEventListener('resize', syncWhenReady);
+
+  const tracedPoints = [];
+  const updateTracePoint = (event) => {
+    const areaRect = ringTraceArea.getBoundingClientRect();
+    tracedPoints.push({
+      x: event.clientX - areaRect.left,
+      y: event.clientY - areaRect.top,
+    });
+  };
+
+  ringTraceArea.addEventListener('pointerdown', (event) => {
+    tracedPoints.length = 0;
+    ringTraceArea.setPointerCapture(event.pointerId);
+    updateTracePoint(event);
+  });
+
+  ringTraceArea.addEventListener('pointermove', (event) => {
+    if (ringTraceArea.hasPointerCapture(event.pointerId)) {
+      updateTracePoint(event);
+    }
+  });
+
+  return {
+    element: ringUi,
+    image: ringImage,
+    traceArea: ringTraceArea,
+    tracedPoints,
+    syncTraceArea: syncWhenReady,
+  };
+}
+
 async function init() {
   await RAPIER.init();
 
@@ -138,10 +191,11 @@ async function init() {
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデルと当たり判定を読み込み中...';
+  status.textContent = '壁モデルとUIリングを読み込み中...';
+  const ring = setupRingUi();
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
-  status.textContent = 'assets/wall.glb を空間に配置し、当たり判定とライトを追加しました。';
+  status.textContent = 'image/ring.png をUIとして画面中央から少し右下へ配置し、0.6倍サイズのなぞれる範囲を追加しました。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -172,10 +226,11 @@ async function init() {
     lights,
     ground,
     wall,
+    ring,
   };
 }
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデルまたはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
