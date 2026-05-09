@@ -13,10 +13,6 @@ const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
-const gunAimLimits = {
-  maxYaw: THREE.MathUtils.degToRad(28),
-  maxPitch: THREE.MathUtils.degToRad(18),
-};
 const gunViewMaxSize = 0.65;
 const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
 const gunForwardPointRadius = 0.04;
@@ -210,33 +206,13 @@ function setupRingUi() {
 
   window.addEventListener('resize', syncWhenReady);
 
-  const aimDirection = new THREE.Vector2(0, 0);
   const tracedPoints = [];
   const updateTracePoint = (event) => {
     const areaRect = ringTraceArea.getBoundingClientRect();
-    const centerX = areaRect.width / 2;
-    const centerY = areaRect.height / 2;
-    const localX = event.clientX - areaRect.left;
-    const localY = event.clientY - areaRect.top;
-    const radius = Math.max(Math.min(areaRect.width, areaRect.height) / 2, 1);
-    const nextAim = new THREE.Vector2((localX - centerX) / radius, (localY - centerY) / radius);
-
-    if (nextAim.length() > 1) {
-      nextAim.normalize();
-    }
-
-    aimDirection.copy(nextAim);
     tracedPoints.push({
-      x: localX,
-      y: localY,
-      aimX: aimDirection.x,
-      aimY: aimDirection.y,
+      x: event.clientX - areaRect.left,
+      y: event.clientY - areaRect.top,
     });
-  };
-  const finishAim = (event) => {
-    if (ringTraceArea.hasPointerCapture(event.pointerId)) {
-      ringTraceArea.releasePointerCapture(event.pointerId);
-    }
   };
 
   ringTraceArea.addEventListener('pointerdown', (event) => {
@@ -251,29 +227,13 @@ function setupRingUi() {
     }
   });
 
-  ringTraceArea.addEventListener('pointerup', finishAim);
-  ringTraceArea.addEventListener('pointercancel', finishAim);
-
   return {
     element: ringUi,
     image: ringImage,
     traceArea: ringTraceArea,
-    aimDirection,
-    aimLimits: gunAimLimits,
     tracedPoints,
     syncTraceArea: syncWhenReady,
   };
-}
-
-function applyGunAim(gun, aimDirection) {
-  const yawOffset = aimDirection.x * gunAimLimits.maxYaw;
-  const pitchOffset = -aimDirection.y * gunAimLimits.maxPitch;
-
-  gun.gun.rotation.set(
-    gunViewRotation.x + pitchOffset,
-    gunViewRotation.y + yawOffset,
-    gunViewRotation.z,
-  );
 }
 
 async function init() {
@@ -295,7 +255,7 @@ async function init() {
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
   const gun = await loadGun(camera);
-  status.textContent = 'リング内のボタンをドラッグすると、上限付きで銃がその方向へ回転します。';
+  status.textContent = 'assets/gun.glb の前に追従ポイントを可視化しました。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -309,7 +269,6 @@ async function init() {
     const delta = Math.min(clock.getDelta(), 0.05);
     world.timestep = delta;
     world.step();
-    applyGunAim(gun, ring.aimDirection);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
@@ -329,7 +288,6 @@ async function init() {
     wall,
     gun,
     ring,
-    aimLimits: gunAimLimits,
   };
 }
 
