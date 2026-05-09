@@ -233,9 +233,7 @@ function setupRingUi() {
       aimY: aimDirection.y,
     });
   };
-  const resetAim = (event) => {
-    aimDirection.set(0, 0);
-
+  const finishAim = (event) => {
     if (ringTraceArea.hasPointerCapture(event.pointerId)) {
       ringTraceArea.releasePointerCapture(event.pointerId);
     }
@@ -253,9 +251,8 @@ function setupRingUi() {
     }
   });
 
-  ringTraceArea.addEventListener('pointerup', resetAim);
-  ringTraceArea.addEventListener('pointercancel', resetAim);
-  ringTraceArea.addEventListener('lostpointercapture', () => aimDirection.set(0, 0));
+  ringTraceArea.addEventListener('pointerup', finishAim);
+  ringTraceArea.addEventListener('pointercancel', finishAim);
 
   return {
     element: ringUi,
