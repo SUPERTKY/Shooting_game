@@ -12,6 +12,7 @@ const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
 const tablePath = './assets/Table.glb';
+const tentPath = './assets/Tent.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
@@ -19,6 +20,9 @@ const tableViewPosition = new THREE.Vector3(0, -0.2, -1);
 const tableViewRotation = new THREE.Euler(0, 0, 0);
 const tableViewQuaternion = new THREE.Quaternion().setFromEuler(tableViewRotation);
 const tableViewMaxSize = 1;
+const tentPosition = new THREE.Vector3(-1.25, 0, -0.55);
+const tentRotation = new THREE.Euler(0, -Math.PI / 7, 0);
+const tentViewMaxSize = 1.25;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
   maxYaw: THREE.MathUtils.degToRad(28),
@@ -175,6 +179,39 @@ async function loadTable(camera) {
   keepCameraChildLevelWithWorld(table, camera, tableViewQuaternion);
 
   return { table, tableModel };
+}
+
+async function loadTent(scene) {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(tentPath);
+  const tent = gltf.scene;
+  tent.name = 'visual-tent';
+
+  tent.updateWorldMatrix(true, true);
+  const tentBox = new THREE.Box3().setFromObject(tent);
+  const tentCenter = tentBox.getCenter(new THREE.Vector3());
+  const tentSize = tentBox.getSize(new THREE.Vector3());
+  const tentMaxSize = Math.max(tentSize.x, tentSize.y, tentSize.z);
+  const tentScale = tentMaxSize > 0 ? tentViewMaxSize / tentMaxSize : 1;
+
+  tent.position.set(
+    tentPosition.x - tentCenter.x * tentScale,
+    tentPosition.y - tentBox.min.y * tentScale,
+    tentPosition.z - tentCenter.z * tentScale,
+  );
+  tent.rotation.copy(tentRotation);
+  tent.scale.setScalar(tentScale);
+
+  tent.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  scene.add(tent);
+
+  return { tent, tentScale };
 }
 
 async function loadGun(camera) {
@@ -473,9 +510,10 @@ async function init() {
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
+  status.textContent = '壁モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
   const ring = setupRingUi();
   const wall = await loadWall(scene, world);
+  const tent = await loadTent(scene);
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
   const gun = await loadGun(camera);
@@ -520,6 +558,7 @@ async function init() {
     lights,
     ground,
     wall,
+    tent,
     table,
     gun,
     bulletTemplate,
@@ -531,5 +570,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
