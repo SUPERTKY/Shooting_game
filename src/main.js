@@ -12,6 +12,7 @@ const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
 const tablePath = './assets/Table.glb';
+const shelfPath = './assets/shelf.glb';
 const tentPath = './assets/Tent.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
@@ -23,6 +24,7 @@ const tableViewMaxSize = 1;
 const tentPosition = new THREE.Vector3(0, 0, 0.5);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
+const shelfWallGap = 0.08;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
   maxYaw: THREE.MathUtils.degToRad(28),
@@ -411,6 +413,58 @@ async function loadWall(scene, world) {
   return { wall, wallBody, wallCollider, wallBox };
 }
 
+async function loadShelf(scene, world, wallBox) {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(shelfPath);
+  const shelf = gltf.scene;
+  shelf.name = 'collision-shelf';
+
+  shelf.updateWorldMatrix(true, true);
+  const initialShelfBox = new THREE.Box3().setFromObject(shelf);
+  const shelfSize = initialShelfBox.getSize(new THREE.Vector3());
+  const shelfCenter = initialShelfBox.getCenter(new THREE.Vector3());
+  const wallCenter = wallBox.getCenter(new THREE.Vector3());
+
+  shelf.position.set(
+    wallCenter.x - shelfCenter.x,
+    -initialShelfBox.min.y,
+    wallBox.max.z + shelfWallGap + shelfSize.z / 2 - shelfCenter.z,
+  );
+
+  shelf.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  scene.add(shelf);
+  shelf.updateWorldMatrix(true, true);
+
+  const shelfBox = new THREE.Box3().setFromObject(shelf);
+  const finalShelfSize = shelfBox.getSize(new THREE.Vector3());
+  const finalShelfCenter = shelfBox.getCenter(new THREE.Vector3());
+
+  const shelfBody = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(
+      finalShelfCenter.x,
+      finalShelfCenter.y,
+      finalShelfCenter.z,
+    ),
+  );
+  const shelfCollider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(
+      finalShelfSize.x / 2,
+      finalShelfSize.y / 2,
+      finalShelfSize.z / 2,
+    ),
+    shelfBody,
+  );
+  shelfCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+
+  return { shelf, shelfBody, shelfCollider, shelfBox };
+}
+
 function syncRingTraceArea() {
   const imageRect = ringImage.getBoundingClientRect();
   const traceSide = Math.min(imageRect.width, imageRect.height) * ringTraceAreaScale;
@@ -510,9 +564,10 @@ async function init() {
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
+  status.textContent = '壁モデル、棚モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
   const ring = setupRingUi();
   const wall = await loadWall(scene, world);
+  const shelf = await loadShelf(scene, world, wall.wallBox);
   const tent = await loadTent(scene);
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
@@ -558,6 +613,7 @@ async function init() {
     lights,
     ground,
     wall,
+    shelf,
     tent,
     table,
     gun,
@@ -570,5 +626,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、棚モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
