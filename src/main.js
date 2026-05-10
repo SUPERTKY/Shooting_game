@@ -7,8 +7,10 @@ const canvasContainer = document.querySelector('#game-canvas');
 const ringUi = document.querySelector('#target-ring-ui');
 const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
+const shootButton = document.querySelector('#shoot-button');
 const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
+const bulletPath = './assets/bullet.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
@@ -20,6 +22,12 @@ const gunAimLimits = {
 const gunViewMaxSize = 0.65;
 const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
 const gunForwardPointRadius = 0.04;
+const bulletSpeed = 16;
+const bulletLifetime = 8;
+const maxActiveBullets = 30;
+const bulletSpawnOffset = 0.08;
+const bulletColliderMinRadius = 0.035;
+const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -157,6 +165,133 @@ async function loadGun(camera) {
   return { gun, gunModel, forwardPoint };
 }
 
+
+async function loadBulletTemplate() {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(bulletPath);
+  const bulletModel = gltf.scene;
+  bulletModel.name = 'bullet-template';
+
+  bulletModel.updateWorldMatrix(true, true);
+  const bulletBox = new THREE.Box3().setFromObject(bulletModel);
+  const bulletCenter = bulletBox.getCenter(new THREE.Vector3());
+  const bulletSize = bulletBox.getSize(new THREE.Vector3());
+
+  bulletModel.position.sub(bulletCenter);
+  bulletModel.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  const fallbackHalfExtent = bulletColliderMinRadius;
+  const halfExtents = new THREE.Vector3(
+    Math.max(bulletSize.x / 2, fallbackHalfExtent),
+    Math.max(bulletSize.y / 2, fallbackHalfExtent),
+    Math.max(bulletSize.z / 2, fallbackHalfExtent),
+  );
+
+  return { model: bulletModel, halfExtents };
+}
+
+function getGunMuzzleWorldTransform(gun) {
+  const muzzlePosition = new THREE.Vector3();
+  const gunQuaternion = new THREE.Quaternion();
+  const muzzleDirection = gunForwardDirection.clone();
+
+  gun.forwardPoint.getWorldPosition(muzzlePosition);
+  gun.gun.getWorldQuaternion(gunQuaternion);
+  muzzleDirection.applyQuaternion(gunQuaternion).normalize();
+  muzzlePosition.addScaledVector(muzzleDirection, bulletSpawnOffset);
+
+  return { muzzlePosition, muzzleDirection };
+}
+
+function createBullet(scene, world, bulletTemplate, gun) {
+  const { muzzlePosition, muzzleDirection } = getGunMuzzleWorldTransform(gun);
+  const bullet = bulletTemplate.model.clone(true);
+  const bulletRotation = new THREE.Quaternion().setFromUnitVectors(
+    gunForwardDirection,
+    muzzleDirection,
+  );
+  bullet.name = 'physics-bullet';
+  bullet.position.copy(muzzlePosition);
+  bullet.quaternion.copy(bulletRotation);
+  scene.add(bullet);
+
+  const bulletBody = world.createRigidBody(
+    RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(muzzlePosition.x, muzzlePosition.y, muzzlePosition.z)
+      .setRotation({
+        x: bulletRotation.x,
+        y: bulletRotation.y,
+        z: bulletRotation.z,
+        w: bulletRotation.w,
+      })
+      .setCcdEnabled(true)
+      .setLinearDamping(0.02)
+      .setAngularDamping(0.2),
+  );
+  bulletBody.setLinvel(
+    {
+      x: muzzleDirection.x * bulletSpeed,
+      y: muzzleDirection.y * bulletSpeed,
+      z: muzzleDirection.z * bulletSpeed,
+    },
+    true,
+  );
+
+  const collider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(
+      bulletTemplate.halfExtents.x,
+      bulletTemplate.halfExtents.y,
+      bulletTemplate.halfExtents.z,
+    ).setRestitution(0.1),
+    bulletBody,
+  );
+  collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+
+  return {
+    mesh: bullet,
+    body: bulletBody,
+    collider,
+    age: 0,
+  };
+}
+
+function syncBulletMeshes(bullets) {
+  bullets.forEach((bullet) => {
+    const position = bullet.body.translation();
+    const rotation = bullet.body.rotation();
+
+    bullet.mesh.position.set(position.x, position.y, position.z);
+    bullet.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+  });
+}
+
+function removeBullet(scene, world, bullet) {
+  scene.remove(bullet.mesh);
+  world.removeRigidBody(bullet.body);
+}
+
+function pruneBullets(scene, world, bullets, delta) {
+  for (let index = bullets.length - 1; index >= 0; index -= 1) {
+    const bullet = bullets[index];
+    bullet.age += delta;
+
+    if (bullet.age > bulletLifetime || bullet.mesh.position.y < -4) {
+      removeBullet(scene, world, bullet);
+      bullets.splice(index, 1);
+    }
+  }
+
+  while (bullets.length > maxActiveBullets) {
+    const bullet = bullets.shift();
+    removeBullet(scene, world, bullet);
+  }
+}
+
 async function loadWall(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(wallPath);
@@ -290,12 +425,14 @@ async function init() {
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデル、銃モデル、UIリングを読み込み中...';
+  status.textContent = '壁モデル、銃モデル、弾モデル、UIリングを読み込み中...';
   const ring = setupRingUi();
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
   const gun = await loadGun(camera);
-  status.textContent = 'リング内のボタンをドラッグすると、上限付きで銃がその方向へ回転します。';
+  const bulletTemplate = await loadBulletTemplate();
+  const bullets = [];
+  status.textContent = 'リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。';
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -305,11 +442,18 @@ async function init() {
 
   window.addEventListener('resize', onResize);
 
+  shootButton.addEventListener('click', () => {
+    applyGunAim(gun, ring.aimDirection);
+    bullets.push(createBullet(scene, world, bulletTemplate, gun));
+  });
+
   function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
     world.timestep = delta;
     world.step();
     applyGunAim(gun, ring.aimDirection);
+    syncBulletMeshes(bullets);
+    pruneBullets(scene, world, bullets, delta);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
@@ -328,6 +472,8 @@ async function init() {
     ground,
     wall,
     gun,
+    bulletTemplate,
+    bullets,
     ring,
     aimLimits: gunAimLimits,
   };
@@ -335,5 +481,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデル、銃モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
