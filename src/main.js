@@ -20,9 +20,9 @@ const tableViewPosition = new THREE.Vector3(0, -0.2, -1);
 const tableViewRotation = new THREE.Euler(0, 0, 0);
 const tableViewQuaternion = new THREE.Quaternion().setFromEuler(tableViewRotation);
 const tableViewMaxSize = 1;
-const tentPosition = new THREE.Vector3(0, 0, -0.1);
+const tentPosition = new THREE.Vector3(0, 0, -0.05);
 const tentRotation = new THREE.Euler(0, 0, 0);
-const tentViewMaxSize = 1.25;
+const tentViewMaxSize = 1.7;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
   maxYaw: THREE.MathUtils.degToRad(28),
