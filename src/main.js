@@ -11,9 +11,13 @@ const shootButton = document.querySelector('#shoot-button');
 const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
+const tablePath = './assets/Table.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
+const tableViewPosition = new THREE.Vector3(0, -1.15, -2.4);
+const tableViewRotation = new THREE.Euler(0, Math.PI, 0);
+const tableViewMaxSize = 1.9;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
   maxYaw: THREE.MathUtils.degToRad(28),
@@ -129,6 +133,38 @@ function createGunForwardPoint(gunScale) {
   forwardPoint.renderOrder = 10;
 
   return forwardPoint;
+}
+
+async function loadTable(camera) {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(tablePath);
+  const tableModel = gltf.scene;
+  const table = new THREE.Group();
+  table.name = 'camera-front-table';
+
+  tableModel.updateWorldMatrix(true, true);
+  const tableBox = new THREE.Box3().setFromObject(tableModel);
+  const tableCenter = tableBox.getCenter(new THREE.Vector3());
+  const tableSize = tableBox.getSize(new THREE.Vector3());
+  const tableMaxSize = Math.max(tableSize.x, tableSize.y, tableSize.z);
+  const tableScale = tableMaxSize > 0 ? tableViewMaxSize / tableMaxSize : 1;
+
+  tableModel.position.sub(tableCenter);
+  table.add(tableModel);
+  table.scale.setScalar(tableScale);
+  table.position.copy(tableViewPosition);
+  table.rotation.copy(tableViewRotation);
+
+  table.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  camera.add(table);
+
+  return { table, tableModel };
 }
 
 async function loadGun(camera) {
@@ -427,10 +463,11 @@ async function init() {
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデル、銃モデル、弾モデル、UIリングを読み込み中...';
+  status.textContent = '壁モデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
   const ring = setupRingUi();
   const wall = await loadWall(scene, world);
   frameObjectInView(wall.wall, camera);
+  const table = await loadTable(camera);
   const gun = await loadGun(camera);
   const bulletTemplate = await loadBulletTemplate();
   const bullets = [];
@@ -473,6 +510,7 @@ async function init() {
     lights,
     ground,
     wall,
+    table,
     gun,
     bulletTemplate,
     bullets,
@@ -483,5 +521,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
