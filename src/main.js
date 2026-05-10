@@ -17,7 +17,7 @@ const ringTraceAreaScale = 0.8;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
 const tableViewPosition = new THREE.Vector3(0, -0.2, -1);
 const tableViewRotation = new THREE.Euler(0, Math.PI, 0);
-const tableViewMaxSize = 1.9;
+const tableViewMaxSize = 1;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
   maxYaw: THREE.MathUtils.degToRad(28),
