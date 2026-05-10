@@ -382,6 +382,62 @@ function pruneBullets(scene, world, bullets, delta) {
   }
 }
 
+function createMeshTrimeshCollider(world, body, mesh) {
+  const geometry = mesh.geometry;
+  const positionAttribute = geometry?.attributes?.position;
+
+  if (!positionAttribute || positionAttribute.count < 3) {
+    return null;
+  }
+
+  mesh.updateWorldMatrix(true, false);
+
+  const vertices = new Float32Array(positionAttribute.count * 3);
+  const vertex = new THREE.Vector3();
+
+  for (let index = 0; index < positionAttribute.count; index += 1) {
+    vertex.fromBufferAttribute(positionAttribute, index).applyMatrix4(mesh.matrixWorld);
+    vertices[index * 3] = vertex.x;
+    vertices[index * 3 + 1] = vertex.y;
+    vertices[index * 3 + 2] = vertex.z;
+  }
+
+  const sourceIndex = geometry.index;
+  const indices = sourceIndex
+    ? new Uint32Array(sourceIndex.array)
+    : Uint32Array.from({ length: positionAttribute.count }, (_, index) => index);
+
+  if (indices.length < 3) {
+    return null;
+  }
+
+  const collider = world.createCollider(
+    RAPIER.ColliderDesc.trimesh(vertices, indices),
+    body,
+  );
+  collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+
+  return collider;
+}
+
+function createModelTrimeshColliders(world, model) {
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0));
+  const colliders = [];
+
+  model.updateWorldMatrix(true, true);
+  model.traverse((child) => {
+    if (child.isMesh) {
+      const collider = createMeshTrimeshCollider(world, body, child);
+
+      if (collider) {
+        colliders.push(collider);
+      }
+    }
+  });
+
+  return { body, colliders };
+}
+
 async function loadWall(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(wallPath);
@@ -447,27 +503,12 @@ async function loadShelf(scene, world, wallBox) {
   shelf.updateWorldMatrix(true, true);
 
   const shelfBox = new THREE.Box3().setFromObject(shelf);
-  const finalShelfSize = shelfBox.getSize(new THREE.Vector3());
-  const finalShelfCenter = shelfBox.getCenter(new THREE.Vector3());
-
-  const shelfBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.fixed().setTranslation(
-      finalShelfCenter.x,
-      finalShelfCenter.y,
-      finalShelfCenter.z,
-    ),
+  const { body: shelfBody, colliders: shelfColliders } = createModelTrimeshColliders(
+    world,
+    shelf,
   );
-  const shelfCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(
-      finalShelfSize.x / 2,
-      finalShelfSize.y / 2,
-      finalShelfSize.z / 2,
-    ),
-    shelfBody,
-  );
-  shelfCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
 
-  return { shelf, shelfBody, shelfCollider, shelfBox };
+  return { shelf, shelfBody, shelfColliders, shelfBox };
 }
 
 function syncRingTraceArea() {
