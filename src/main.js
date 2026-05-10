@@ -26,7 +26,8 @@ const bulletSpeed = 16;
 const bulletLifetime = 8;
 const maxActiveBullets = 30;
 const bulletSpawnOffset = 0.08;
-const bulletColliderMinRadius = 0.035;
+const bulletScale = 0.1;
+const bulletColliderMinRadius = 0.035 * bulletScale;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
 const clock = new THREE.Clock();
 
@@ -178,6 +179,7 @@ async function loadBulletTemplate() {
   const bulletSize = bulletBox.getSize(new THREE.Vector3());
 
   bulletModel.position.sub(bulletCenter);
+  bulletModel.scale.setScalar(bulletScale);
   bulletModel.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
@@ -187,9 +189,9 @@ async function loadBulletTemplate() {
 
   const fallbackHalfExtent = bulletColliderMinRadius;
   const halfExtents = new THREE.Vector3(
-    Math.max(bulletSize.x / 2, fallbackHalfExtent),
-    Math.max(bulletSize.y / 2, fallbackHalfExtent),
-    Math.max(bulletSize.z / 2, fallbackHalfExtent),
+    Math.max((bulletSize.x * bulletScale) / 2, fallbackHalfExtent),
+    Math.max((bulletSize.y * bulletScale) / 2, fallbackHalfExtent),
+    Math.max((bulletSize.z * bulletScale) / 2, fallbackHalfExtent),
   );
 
   return { model: bulletModel, halfExtents };
