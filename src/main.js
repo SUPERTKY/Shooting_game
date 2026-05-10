@@ -25,6 +25,9 @@ const tentPosition = new THREE.Vector3(0, 0, 0.5);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
 const shelfWallGap = 0.08;
+const shelfScale = 0.85;
+const shelfRotationY = -Math.PI / 2;
+const shelfHeightOffset = 0.18;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
   maxYaw: THREE.MathUtils.degToRad(28),
@@ -419,16 +422,18 @@ async function loadShelf(scene, world, wallBox) {
   const shelf = gltf.scene;
   shelf.name = 'collision-shelf';
 
+  shelf.scale.setScalar(shelfScale);
+  shelf.rotation.y = shelfRotationY;
   shelf.updateWorldMatrix(true, true);
-  const initialShelfBox = new THREE.Box3().setFromObject(shelf);
-  const shelfSize = initialShelfBox.getSize(new THREE.Vector3());
-  const shelfCenter = initialShelfBox.getCenter(new THREE.Vector3());
+
+  const transformedShelfBox = new THREE.Box3().setFromObject(shelf);
+  const shelfCenter = transformedShelfBox.getCenter(new THREE.Vector3());
   const wallCenter = wallBox.getCenter(new THREE.Vector3());
 
   shelf.position.set(
     wallCenter.x - shelfCenter.x,
-    -initialShelfBox.min.y,
-    wallBox.max.z + shelfWallGap + shelfSize.z / 2 - shelfCenter.z,
+    -transformedShelfBox.min.y + shelfHeightOffset,
+    wallBox.max.z + shelfWallGap - transformedShelfBox.min.z,
   );
 
   shelf.traverse((child) => {
