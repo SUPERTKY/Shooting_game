@@ -17,6 +17,7 @@ const ringTraceAreaScale = 0.8;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
 const tableViewPosition = new THREE.Vector3(0, -0.2, -1);
 const tableViewRotation = new THREE.Euler(0, 0, 0);
+const tableViewQuaternion = new THREE.Quaternion().setFromEuler(tableViewRotation);
 const tableViewMaxSize = 1;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
@@ -118,6 +119,14 @@ function frameObjectInView(object, camera) {
   camera.updateProjectionMatrix();
 }
 
+function keepCameraChildLevelWithWorld(child, camera, worldQuaternion) {
+  camera.updateWorldMatrix(true, false);
+  child.quaternion
+    .copy(camera.getWorldQuaternion(new THREE.Quaternion()))
+    .invert()
+    .multiply(worldQuaternion);
+}
+
 function createGunForwardPoint(gunScale) {
   const markerScale = gunScale > 0 ? gunScale : 1;
   const pointGeometry = new THREE.SphereGeometry(gunForwardPointRadius / markerScale, 24, 16);
@@ -163,6 +172,7 @@ async function loadTable(camera) {
   });
 
   camera.add(table);
+  keepCameraChildLevelWithWorld(table, camera, tableViewQuaternion);
 
   return { table, tableModel };
 }
