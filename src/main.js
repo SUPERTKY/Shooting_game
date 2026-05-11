@@ -48,7 +48,7 @@ const bulletSpeed = 32;
 const bulletLifetime = 8;
 const maxActiveBullets = 30;
 const bulletSpawnOffset = 0.08;
-const bulletScale = 0.0125;
+const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
 const clock = new THREE.Clock();
@@ -72,7 +72,7 @@ function createCamera() {
     0.1,
     100,
   );
-  camera.position.set(0, 0.3, 8.5);
+  camera.position.set(0, 0, 8.5);
   camera.lookAt(0, 1.4, 0);
 
   return camera;
