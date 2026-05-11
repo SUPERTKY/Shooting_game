@@ -14,6 +14,7 @@ const bulletPath = './assets/bullet.glb';
 const tablePath = './assets/Table.glb';
 const shelfPath = './assets/shelf.glb';
 const tentPath = './assets/Tent.glb';
+const prizePath = './Prize/Prize_1.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
@@ -24,6 +25,11 @@ const tableViewMaxSize = 1;
 const tentPosition = new THREE.Vector3(0, 0, 0.5);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
+const prizePosition = new THREE.Vector3(0, 1.25, 1.05);
+const prizeRotation = new THREE.Euler(0, THREE.MathUtils.degToRad(25), 0);
+const prizeViewMaxSize = 0.45;
+const prizeLinearDamping = 0.35;
+const prizeAngularDamping = 0.8;
 const shelfWallGap = 0.08;
 const shelfScale = 0.85;
 const shelfRotationY = -Math.PI / 2;
@@ -275,14 +281,12 @@ async function loadBulletTemplate() {
     }
   });
 
-  const fallbackHalfExtent = bulletColliderMinRadius;
-  const halfExtents = new THREE.Vector3(
-    Math.max((bulletSize.x * bulletScale) / 2, fallbackHalfExtent),
-    Math.max((bulletSize.y * bulletScale) / 2, fallbackHalfExtent),
-    Math.max((bulletSize.z * bulletScale) / 2, fallbackHalfExtent),
+  const bulletRadius = Math.max(
+    (Math.max(bulletSize.x, bulletSize.y, bulletSize.z) * bulletScale) / 2,
+    bulletColliderMinRadius,
   );
 
-  return { model: bulletModel, halfExtents };
+  return { model: bulletModel, radius: bulletRadius };
 }
 
 function getGunMuzzleWorldTransform(gun) {
@@ -333,11 +337,7 @@ function createBullet(scene, world, bulletTemplate, gun) {
   );
 
   const collider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(
-      bulletTemplate.halfExtents.x,
-      bulletTemplate.halfExtents.y,
-      bulletTemplate.halfExtents.z,
-    ).setRestitution(0.1),
+    RAPIER.ColliderDesc.ball(bulletTemplate.radius).setRestitution(0.1),
     bulletBody,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -382,7 +382,7 @@ function pruneBullets(scene, world, bullets, delta) {
   }
 }
 
-function createMeshTrimeshCollider(world, body, mesh) {
+function createMeshTrimeshCollider(world, body, mesh, root = null) {
   const geometry = mesh.geometry;
   const positionAttribute = geometry?.attributes?.position;
 
@@ -391,12 +391,21 @@ function createMeshTrimeshCollider(world, body, mesh) {
   }
 
   mesh.updateWorldMatrix(true, false);
+  root?.updateWorldMatrix(true, false);
 
+  const rootInverseMatrix = root
+    ? new THREE.Matrix4().copy(root.matrixWorld).invert()
+    : null;
   const vertices = new Float32Array(positionAttribute.count * 3);
   const vertex = new THREE.Vector3();
 
   for (let index = 0; index < positionAttribute.count; index += 1) {
     vertex.fromBufferAttribute(positionAttribute, index).applyMatrix4(mesh.matrixWorld);
+
+    if (rootInverseMatrix) {
+      vertex.applyMatrix4(rootInverseMatrix);
+    }
+
     vertices[index * 3] = vertex.x;
     vertices[index * 3 + 1] = vertex.y;
     vertices[index * 3 + 2] = vertex.z;
@@ -511,6 +520,76 @@ async function loadShelf(scene, world, wallBox) {
   return { shelf, shelfBody, shelfColliders, shelfBox };
 }
 
+async function loadPrize(scene, world) {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(prizePath);
+  const prizeModel = gltf.scene;
+  const prize = new THREE.Group();
+  prize.name = 'dynamic-prize';
+
+  prizeModel.updateWorldMatrix(true, true);
+  const prizeBox = new THREE.Box3().setFromObject(prizeModel);
+  const prizeCenter = prizeBox.getCenter(new THREE.Vector3());
+  const prizeSize = prizeBox.getSize(new THREE.Vector3());
+  const prizeMaxSize = Math.max(prizeSize.x, prizeSize.y, prizeSize.z);
+  const prizeScale = prizeMaxSize > 0 ? prizeViewMaxSize / prizeMaxSize : 1;
+
+  prizeModel.position.set(
+    -prizeCenter.x * prizeScale,
+    -prizeBox.min.y * prizeScale,
+    -prizeCenter.z * prizeScale,
+  );
+  prizeModel.scale.setScalar(prizeScale);
+  prize.add(prizeModel);
+  prize.position.copy(prizePosition);
+  prize.rotation.copy(prizeRotation);
+
+  prize.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  scene.add(prize);
+  prize.updateWorldMatrix(true, true);
+
+  const prizeQuaternion = new THREE.Quaternion().setFromEuler(prizeRotation);
+  const prizeBody = world.createRigidBody(
+    RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(prizePosition.x, prizePosition.y, prizePosition.z)
+      .setRotation({
+        x: prizeQuaternion.x,
+        y: prizeQuaternion.y,
+        z: prizeQuaternion.z,
+        w: prizeQuaternion.w,
+      })
+      .setLinearDamping(prizeLinearDamping)
+      .setAngularDamping(prizeAngularDamping),
+  );
+  const prizeColliders = [];
+
+  prize.traverse((child) => {
+    if (child.isMesh) {
+      const collider = createMeshTrimeshCollider(world, prizeBody, child, prize);
+
+      if (collider) {
+        prizeColliders.push(collider);
+      }
+    }
+  });
+
+  return { prize, prizeModel, prizeBody, prizeColliders };
+}
+
+function syncPrizeMesh(prize) {
+  const position = prize.prizeBody.translation();
+  const rotation = prize.prizeBody.rotation();
+
+  prize.prize.position.set(position.x, position.y, position.z);
+  prize.prize.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+}
+
 function syncRingTraceArea() {
   const imageRect = ringImage.getBoundingClientRect();
   const traceSide = Math.min(imageRect.width, imageRect.height) * ringTraceAreaScale;
@@ -610,10 +689,11 @@ async function init() {
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
-  status.textContent = '壁モデル、棚モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
+  status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
   const ring = setupRingUi();
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
+  const prize = await loadPrize(scene, world);
   const tent = await loadTent(scene);
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
@@ -641,6 +721,7 @@ async function init() {
     world.step();
     applyGunAim(gun, ring.aimDirection);
     syncBulletMeshes(bullets);
+    syncPrizeMesh(prize);
     pruneBullets(scene, world, bullets, delta);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
@@ -660,6 +741,7 @@ async function init() {
     ground,
     wall,
     shelf,
+    prize,
     tent,
     table,
     gun,
@@ -672,5 +754,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデル、棚モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
