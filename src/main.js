@@ -17,6 +17,8 @@ const tentPath = './assets/Tent.glb';
 const prizePath = './Prize/Prize_1.glb';
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
+const cameraViewHeightRatio = 0.5;
+const cameraBackDistanceMultiplier = 2.1;
 const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
 const tableViewPosition = new THREE.Vector3(0, -0.4, -0.5);
 const tableViewRotation = new THREE.Euler(0, 0, 0);
@@ -70,8 +72,8 @@ function createCamera() {
     0.1,
     100,
   );
-  camera.position.set(0, 2.1, 7);
-  camera.lookAt(0, 1, 0);
+  camera.position.set(0, 1.4, 8.5);
+  camera.lookAt(0, 1.4, 0);
 
   return camera;
 }
@@ -129,8 +131,10 @@ function frameObjectInView(object, camera) {
   const maxSize = Math.max(size.x, size.y, size.z);
   const distance = maxSize / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
 
-  camera.position.set(center.x, center.y + maxSize * 0.35, center.z + distance * 1.25);
-  camera.lookAt(center.x, center.y + size.y * 0.15, center.z);
+  const viewHeight = center.y + size.y * cameraViewHeightRatio;
+
+  camera.position.set(center.x, viewHeight, center.z + distance * cameraBackDistanceMultiplier);
+  camera.lookAt(center.x, viewHeight, center.z);
   camera.updateProjectionMatrix();
 }
 
