@@ -275,14 +275,12 @@ async function loadBulletTemplate() {
     }
   });
 
-  const fallbackHalfExtent = bulletColliderMinRadius;
-  const halfExtents = new THREE.Vector3(
-    Math.max((bulletSize.x * bulletScale) / 2, fallbackHalfExtent),
-    Math.max((bulletSize.y * bulletScale) / 2, fallbackHalfExtent),
-    Math.max((bulletSize.z * bulletScale) / 2, fallbackHalfExtent),
+  const bulletRadius = Math.max(
+    (Math.max(bulletSize.x, bulletSize.y, bulletSize.z) * bulletScale) / 2,
+    bulletColliderMinRadius,
   );
 
-  return { model: bulletModel, halfExtents };
+  return { model: bulletModel, radius: bulletRadius };
 }
 
 function getGunMuzzleWorldTransform(gun) {
@@ -333,11 +331,7 @@ function createBullet(scene, world, bulletTemplate, gun) {
   );
 
   const collider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(
-      bulletTemplate.halfExtents.x,
-      bulletTemplate.halfExtents.y,
-      bulletTemplate.halfExtents.z,
-    ).setRestitution(0.1),
+    RAPIER.ColliderDesc.ball(bulletTemplate.radius).setRestitution(0.1),
     bulletBody,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
