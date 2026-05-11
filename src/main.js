@@ -36,8 +36,8 @@ const shelfRotationY = -Math.PI / 2;
 const shelfHeightOffset = 0.4;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
-  maxYaw: THREE.MathUtils.degToRad(28),
-  maxPitch: THREE.MathUtils.degToRad(18),
+  maxYaw: THREE.MathUtils.degToRad(34),
+  maxPitch: THREE.MathUtils.degToRad(30),
 };
 const gunViewMaxSize = 0.65;
 const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
