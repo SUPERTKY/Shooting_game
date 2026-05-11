@@ -22,10 +22,10 @@ const tableViewPosition = new THREE.Vector3(0, -0.4, -0.5);
 const tableViewRotation = new THREE.Euler(0, 0, 0);
 const tableViewQuaternion = new THREE.Quaternion().setFromEuler(tableViewRotation);
 const tableViewMaxSize = 1;
-const tentPosition = new THREE.Vector3(0, 0, -2);
+const tentPosition = new THREE.Vector3(0, 0, -6);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
-const prizePosition = new THREE.Vector3(-0.5, 0.5, -1.7);
+const prizePosition = new THREE.Vector3(-0.5, 0.5, -7.7);
 const prizeRotation = new THREE.Euler(0, 0, 0);
 const prizeViewMaxSize = 0.2;
 const prizeLinearDamping = 0.35;
@@ -479,7 +479,7 @@ async function loadWall(scene, world) {
   const gltf = await loader.loadAsync(wallPath);
   const wall = gltf.scene;
   wall.name = 'collision-wall';
-  wall.position.set(0, 0, -2.5);
+  wall.position.set(0, 0, -9.5);
   wall.rotation.y = wallRotationY;
 
   wall.traverse((child) => {
