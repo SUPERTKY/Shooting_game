@@ -47,7 +47,7 @@ const bulletLifetime = 8;
 const maxActiveBullets = 30;
 const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0125;
-const bulletColliderMinRadius = 0.035 * bulletScale;
+const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
 const clock = new THREE.Clock();
 
@@ -382,7 +382,7 @@ function pruneBullets(scene, world, bullets, delta) {
   }
 }
 
-function createMeshTrimeshCollider(world, body, mesh, root = null) {
+function getMeshColliderData(mesh, root = null) {
   const geometry = mesh.geometry;
   const positionAttribute = geometry?.attributes?.position;
 
@@ -420,11 +420,38 @@ function createMeshTrimeshCollider(world, body, mesh, root = null) {
     return null;
   }
 
+  return { vertices, indices };
+}
+
+function createMeshTrimeshCollider(world, body, mesh, root = null) {
+  const colliderData = getMeshColliderData(mesh, root);
+
+  if (!colliderData) {
+    return null;
+  }
+
   const collider = world.createCollider(
-    RAPIER.ColliderDesc.trimesh(vertices, indices),
+    RAPIER.ColliderDesc.trimesh(colliderData.vertices, colliderData.indices),
     body,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+
+  return collider;
+}
+
+function createMeshConvexHullCollider(world, body, mesh, root = null) {
+  const colliderData = getMeshColliderData(mesh, root);
+  const colliderDesc = colliderData
+    ? RAPIER.ColliderDesc.convexHull(colliderData.vertices)
+    : null;
+
+  if (!colliderDesc) {
+    return null;
+  }
+
+  const collider = world.createCollider(colliderDesc, body);
+  collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+  collider.setRestitution(0.2);
 
   return collider;
 }
@@ -564,6 +591,7 @@ async function loadPrize(scene, world) {
         z: prizeQuaternion.z,
         w: prizeQuaternion.w,
       })
+      .setCcdEnabled(true)
       .setLinearDamping(prizeLinearDamping)
       .setAngularDamping(prizeAngularDamping),
   );
@@ -571,7 +599,7 @@ async function loadPrize(scene, world) {
 
   prize.traverse((child) => {
     if (child.isMesh) {
-      const collider = createMeshTrimeshCollider(world, prizeBody, child, prize);
+      const collider = createMeshConvexHullCollider(world, prizeBody, child, prize);
 
       if (collider) {
         prizeColliders.push(collider);
