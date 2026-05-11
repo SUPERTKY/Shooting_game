@@ -33,7 +33,7 @@ const prizeAngularDamping = 0.8;
 const shelfWallGap = 0.08;
 const shelfScale = 0.85;
 const shelfRotationY = -Math.PI / 2;
-const shelfHeightOffset = 0.4;
+const shelfHeightOffset = 0.3;
 const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
 const gunAimLimits = {
   maxYaw: THREE.MathUtils.degToRad(34),
