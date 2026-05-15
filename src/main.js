@@ -198,6 +198,7 @@ async function loadGround(scene, world) {
     world,
     ground,
   );
+  groundCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
 
   return { ground, groundScale, groundBody, groundColliders };
 }
