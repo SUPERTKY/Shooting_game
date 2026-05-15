@@ -70,15 +70,16 @@ const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
-const skyScale = 450000;
-const skySunElevation = 26;
-const skySunAzimuth = 170;
+const skyScale = 120;
+const skySunElevation = 24;
+const skySunAzimuth = 135;
 const realisticSkySettings = {
-  turbidity: 2.4,
-  rayleigh: 3.2,
-  mieCoefficient: 0.0045,
-  mieDirectionalG: 0.82,
-  exposure: 0.48,
+  topColor: new THREE.Color(0x3f8fff),
+  horizonColor: new THREE.Color(0xb7dcff),
+  bottomColor: new THREE.Color(0xf4e6c8),
+  offset: 0.18,
+  exponent: 0.85,
+  exposure: 0.8,
 };
 const clock = new THREE.Clock();
 
@@ -108,25 +109,57 @@ function createCamera() {
 }
 
 function createRealisticSky(scene, renderer) {
-  const sky = new Sky();
-  sky.name = 'realistic-sky';
-  sky.scale.setScalar(skyScale);
+  const skyGeometry = new THREE.SphereGeometry(skyScale, 32, 15);
+  const skyMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: realisticSkySettings.topColor },
+      horizonColor: { value: realisticSkySettings.horizonColor },
+      bottomColor: { value: realisticSkySettings.bottomColor },
+      offset: { value: realisticSkySettings.offset },
+      exponent: { value: realisticSkySettings.exponent },
+    },
+    vertexShader: `
+      varying vec3 vWorldPosition;
 
-  const skyUniforms = sky.material.uniforms;
-  skyUniforms.turbidity.value = realisticSkySettings.turbidity;
-  skyUniforms.rayleigh.value = realisticSkySettings.rayleigh;
-  skyUniforms.mieCoefficient.value = realisticSkySettings.mieCoefficient;
-  skyUniforms.mieDirectionalG.value = realisticSkySettings.mieDirectionalG;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 topColor;
+      uniform vec3 horizonColor;
+      uniform vec3 bottomColor;
+      uniform float offset;
+      uniform float exponent;
+      varying vec3 vWorldPosition;
+
+      void main() {
+        float height = normalize(vWorldPosition + vec3(0.0, offset, 0.0)).y;
+        float skyMix = smoothstep(-0.08, 0.65, height);
+        float topMix = pow(max(height, 0.0), exponent);
+        vec3 horizon = mix(bottomColor, horizonColor, skyMix);
+        vec3 color = mix(horizon, topColor, topMix);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    side: THREE.BackSide,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+  sky.name = 'realistic-sky';
+  scene.add(sky);
 
   const sunPosition = new THREE.Vector3();
   const phi = THREE.MathUtils.degToRad(90 - skySunElevation);
   const theta = THREE.MathUtils.degToRad(skySunAzimuth);
   sunPosition.setFromSphericalCoords(1, phi, theta);
-  skyUniforms.sunPosition.value.copy(sunPosition);
 
+  renderer.setClearColor(realisticSkySettings.horizonColor, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = realisticSkySettings.exposure;
-  scene.add(sky);
 
   return { sky, sunPosition };
 }
@@ -801,7 +834,7 @@ function applyGunAim(gun, aimDirection) {
 }
 
 async function init() {
-  await RAPIER.init();
+  await RAPIER.init({});
 
   const scene = new THREE.Scene();
 
