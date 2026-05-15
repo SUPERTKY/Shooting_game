@@ -70,6 +70,10 @@ const maxActiveBullets = 30;
 const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
+const bulletTrailPointCount = 18;
+const bulletTrailSpacing = 0.045;
+const bulletTrailColor = 0xffffff;
+const bulletTrailOpacity = 0.72;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
 const collisionGroups = {
   environment: 0x0001,
@@ -378,6 +382,68 @@ function playGunshotSound(gunshotSound) {
   });
 }
 
+function createBulletTrail(muzzlePosition, muzzleDirection) {
+  const trailPositions = Array.from({ length: bulletTrailPointCount }, (_, index) => (
+    muzzlePosition.clone().addScaledVector(muzzleDirection, -bulletTrailSpacing * index)
+  ));
+  const trailPositionBuffer = new Float32Array(bulletTrailPointCount * 3);
+  const trailGeometry = new THREE.BufferGeometry();
+  const trailMaterial = new THREE.LineBasicMaterial({
+    color: bulletTrailColor,
+    transparent: true,
+    opacity: bulletTrailOpacity,
+    depthWrite: false,
+  });
+  const trail = new THREE.Line(trailGeometry, trailMaterial);
+  trail.name = 'bullet-white-trail';
+  trail.frustumCulled = false;
+  trail.renderOrder = 1;
+
+  updateTrailGeometry(trail, trailPositions, trailPositionBuffer);
+
+  return {
+    line: trail,
+    positions: trailPositions,
+    positionBuffer: trailPositionBuffer,
+  };
+}
+
+function updateTrailGeometry(trail, trailPositions, trailPositionBuffer) {
+  trailPositions.forEach((position, index) => {
+    const offset = index * 3;
+    trailPositionBuffer[offset] = position.x;
+    trailPositionBuffer[offset + 1] = position.y;
+    trailPositionBuffer[offset + 2] = position.z;
+  });
+
+  const positionAttribute = trail.geometry.getAttribute('position');
+  if (positionAttribute) {
+    positionAttribute.needsUpdate = true;
+  } else {
+    trail.geometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(trailPositionBuffer, 3),
+    );
+  }
+
+  trail.geometry.computeBoundingSphere();
+}
+
+function updateBulletTrail(bullet) {
+  bullet.trail.positions.pop();
+  bullet.trail.positions.unshift(bullet.mesh.position.clone());
+  updateTrailGeometry(
+    bullet.trail.line,
+    bullet.trail.positions,
+    bullet.trail.positionBuffer,
+  );
+}
+
+function disposeBulletTrail(trail) {
+  trail.line.geometry.dispose();
+  trail.line.material.dispose();
+}
+
 function createBullet(scene, world, bulletTemplate, gun) {
   const { muzzlePosition, muzzleDirection } = getGunMuzzleWorldTransform(gun);
   const bullet = bulletTemplate.model.clone(true);
@@ -389,6 +455,9 @@ function createBullet(scene, world, bulletTemplate, gun) {
   bullet.position.copy(muzzlePosition);
   bullet.quaternion.copy(bulletRotation);
   scene.add(bullet);
+
+  const trail = createBulletTrail(muzzlePosition, muzzleDirection);
+  scene.add(trail.line);
 
   const bulletBody = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
@@ -424,6 +493,7 @@ function createBullet(scene, world, bulletTemplate, gun) {
     mesh: bullet,
     body: bulletBody,
     collider,
+    trail,
     age: 0,
   };
 }
@@ -435,11 +505,14 @@ function syncBulletMeshes(bullets) {
 
     bullet.mesh.position.set(position.x, position.y, position.z);
     bullet.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+    updateBulletTrail(bullet);
   });
 }
 
 function removeBullet(scene, world, bullet) {
   scene.remove(bullet.mesh);
+  scene.remove(bullet.trail.line);
+  disposeBulletTrail(bullet.trail);
   world.removeRigidBody(bullet.body);
 }
 
