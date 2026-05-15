@@ -44,7 +44,7 @@ const gunAimLimits = {
 };
 const gunViewMaxSize = 0.65;
 const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
-const bulletSpeed = 10;
+const bulletSpeed = 20;
 const bulletLifetime = 8;
 const maxActiveBullets = 30;
 const bulletSpawnOffset = 0.08;
