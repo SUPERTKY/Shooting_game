@@ -11,6 +11,7 @@ const shootButton = document.querySelector('#shoot-button');
 const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
+const gunshotSoundPath = './Sound/gun.mp3';
 const tablePath = './assets/Table.glb';
 const shelfPath = './assets/shelf.glb';
 const tentPath = './assets/Tent.glb';
@@ -43,7 +44,6 @@ const gunAimLimits = {
 };
 const gunViewMaxSize = 0.65;
 const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
-const gunForwardPointRadius = 0.04;
 const bulletSpeed = 10;
 const bulletLifetime = 8;
 const maxActiveBullets = 30;
@@ -146,21 +146,13 @@ function keepCameraChildLevelWithWorld(child, camera, worldQuaternion) {
     .multiply(worldQuaternion);
 }
 
-function createGunForwardPoint(gunScale) {
-  const markerScale = gunScale > 0 ? gunScale : 1;
-  const pointGeometry = new THREE.SphereGeometry(gunForwardPointRadius / markerScale, 24, 16);
-  const pointMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff315f,
-    depthTest: false,
-    transparent: true,
-    opacity: 0.95,
-  });
-  const forwardPoint = new THREE.Mesh(pointGeometry, pointMaterial);
-  forwardPoint.name = 'gun-forward-point';
-  forwardPoint.position.copy(gunForwardPointOffset).divideScalar(markerScale);
-  forwardPoint.renderOrder = 10;
+function createGunMuzzleAnchor(gunScale) {
+  const anchorScale = gunScale > 0 ? gunScale : 1;
+  const muzzleAnchor = new THREE.Object3D();
+  muzzleAnchor.name = 'gun-muzzle-anchor';
+  muzzleAnchor.position.copy(gunForwardPointOffset).divideScalar(anchorScale);
 
-  return forwardPoint;
+  return muzzleAnchor;
 }
 
 async function loadTable(camera) {
@@ -256,12 +248,12 @@ async function loadGun(camera) {
     }
   });
 
-  const forwardPoint = createGunForwardPoint(gunScale);
-  gun.add(forwardPoint);
+  const muzzleAnchor = createGunMuzzleAnchor(gunScale);
+  gun.add(muzzleAnchor);
 
   camera.add(gun);
 
-  return { gun, gunModel, forwardPoint };
+  return { gun, gunModel, muzzleAnchor };
 }
 
 
@@ -298,12 +290,28 @@ function getGunMuzzleWorldTransform(gun) {
   const gunQuaternion = new THREE.Quaternion();
   const muzzleDirection = gunForwardDirection.clone();
 
-  gun.forwardPoint.getWorldPosition(muzzlePosition);
+  gun.muzzleAnchor.getWorldPosition(muzzlePosition);
   gun.gun.getWorldQuaternion(gunQuaternion);
   muzzleDirection.applyQuaternion(gunQuaternion).normalize();
   muzzlePosition.addScaledVector(muzzleDirection, bulletSpawnOffset);
 
   return { muzzlePosition, muzzleDirection };
+}
+
+
+function createGunshotSound() {
+  const gunshotSound = new Audio(gunshotSoundPath);
+  gunshotSound.preload = 'auto';
+
+  return gunshotSound;
+}
+
+function playGunshotSound(gunshotSound) {
+  const sound = gunshotSound.cloneNode();
+  sound.currentTime = 0;
+  sound.play().catch((error) => {
+    console.warn('銃声の再生に失敗しました。', error);
+  });
 }
 
 function createBullet(scene, world, bulletTemplate, gun) {
@@ -731,6 +739,7 @@ async function init() {
   const table = await loadTable(camera);
   const gun = await loadGun(camera);
   const bulletTemplate = await loadBulletTemplate();
+  const gunshotSound = createGunshotSound();
   const bullets = [];
   status.textContent = 'リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。';
 
@@ -744,6 +753,7 @@ async function init() {
 
   shootButton.addEventListener('click', () => {
     applyGunAim(gun, ring.aimDirection);
+    playGunshotSound(gunshotSound);
     bullets.push(createBullet(scene, world, bulletTemplate, gun));
   });
 
@@ -778,6 +788,7 @@ async function init() {
     table,
     gun,
     bulletTemplate,
+    gunshotSound,
     bullets,
     ring,
     aimLimits: gunAimLimits,
