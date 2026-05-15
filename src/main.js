@@ -13,6 +13,7 @@ const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
 const gunshotSoundPath = './Sound/gun.mp3';
 const tablePath = './assets/Table.glb';
+const groundPath = './assets/Ground.glb';
 const shelfPath = './assets/shelf.glb';
 const tentPath = './assets/Tent.glb';
 const maxPrizeCount = 10;
@@ -35,6 +36,8 @@ const tableViewMaxSize = 1;
 const tentPosition = new THREE.Vector3(0, 0, -2);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
+const groundViewMaxSize = 16;
+const groundPosition = new THREE.Vector3(0, 0, 0);
 const skyTexturePath = './image/sky.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
@@ -161,28 +164,43 @@ function addLights(scene) {
   return { ambientLight, keyLight, fillLight };
 }
 
-function createGround(scene, world) {
-  const groundGeometry = new THREE.PlaneGeometry(16, 16);
-  const groundMaterial = new THREE.MeshStandardMaterial({
-    color: 0x20242f,
-    roughness: 0.85,
-    metalness: 0.05,
+async function loadGround(scene, world) {
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(groundPath);
+  const ground = gltf.scene;
+  ground.name = 'visual-ground';
+
+  ground.updateWorldMatrix(true, true);
+  const groundBox = new THREE.Box3().setFromObject(ground);
+  const groundCenter = groundBox.getCenter(new THREE.Vector3());
+  const groundSize = groundBox.getSize(new THREE.Vector3());
+  const groundMaxSize = Math.max(groundSize.x, groundSize.y, groundSize.z);
+  const groundScale = groundMaxSize > 0 ? groundViewMaxSize / groundMaxSize : 1;
+
+  ground.position.set(
+    groundPosition.x - groundCenter.x * groundScale,
+    groundPosition.y - groundBox.min.y * groundScale,
+    groundPosition.z - groundCenter.z * groundScale,
+  );
+  ground.scale.setScalar(groundScale);
+
+  ground.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = false;
+      child.receiveShadow = true;
+    }
   });
-  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
+
   scene.add(ground);
+  ground.updateWorldMatrix(true, true);
 
-  const groundBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0),
+  const { body: groundBody, colliders: groundColliders } = createModelTrimeshColliders(
+    world,
+    ground,
   );
-  const groundCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(8, 0.05, 8)
-      .setCollisionGroups(environmentCollisionGroup),
-    groundBody,
-  );
+  const groundCollider = groundColliders[0] ?? null;
 
-  return { ground, groundBody, groundCollider };
+  return { ground, groundScale, groundBody, groundCollider, groundColliders };
 }
 
 function frameObjectInView(object, camera) {
@@ -917,10 +935,10 @@ async function init() {
   scene.add(camera);
   const background = await configureBackground(scene);
   const lights = addLights(scene);
-  const ground = createGround(scene, world);
 
-  status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
+  status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
   const ring = setupRingUi();
+  const ground = await loadGround(scene, world);
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
   const prizes = await loadPrizes(scene, world);
@@ -989,5 +1007,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '背景画像、壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '背景画像、地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
