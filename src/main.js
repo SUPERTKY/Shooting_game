@@ -16,7 +16,14 @@ const gunshotSoundPath = './Sound/gun.mp3';
 const tablePath = './assets/Table.glb';
 const shelfPath = './assets/shelf.glb';
 const tentPath = './assets/Tent.glb';
-const prizePath = './Prize/Prize_1.glb';
+const maxPrizeCount = 10;
+const createPrizeConfig = (id, position, rotation = new THREE.Euler(0, 0, 0), size = 0.15) => ({
+  id,
+  path: `./Prize/Prize_${id}.glb`,
+  position,
+  rotation,
+  size,
+});
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
 const cameraViewHeightRatio = 0.44;
@@ -29,9 +36,21 @@ const tableViewMaxSize = 1;
 const tentPosition = new THREE.Vector3(0, 0, -2);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
-const prizePosition = new THREE.Vector3(-0.5, 0.5, -1.65);
-const prizeRotation = new THREE.Euler(0, 0, 0);
-const prizeViewMaxSize = 0.15;
+// 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
+// 未追加のファイルは読み込み時にスキップされます。
+// 各行の position / rotation / size を変更すると、景品ごとに位置・回転・サイズを調整できます。
+const prizeConfigs = [
+  createPrizeConfig(1, new THREE.Vector3(-0.5, 0.5, -1.65)),
+  createPrizeConfig(2, new THREE.Vector3(-0.25, 0.5, -1.65)),
+  createPrizeConfig(3, new THREE.Vector3(0, 0.5, -1.65)),
+  createPrizeConfig(4, new THREE.Vector3(0.25, 0.5, -1.65)),
+  createPrizeConfig(5, new THREE.Vector3(0.5, 0.5, -1.65)),
+  createPrizeConfig(6, new THREE.Vector3(-0.5, 0.75, -1.65)),
+  createPrizeConfig(7, new THREE.Vector3(-0.25, 0.75, -1.65)),
+  createPrizeConfig(8, new THREE.Vector3(0, 0.75, -1.65)),
+  createPrizeConfig(9, new THREE.Vector3(0.25, 0.75, -1.65)),
+  createPrizeConfig(10, new THREE.Vector3(0.5, 0.75, -1.65)),
+].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const shelfWallGap = 0.08;
@@ -53,12 +72,14 @@ const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
 const skyScale = 450000;
-const daylightSunPosition = new THREE.Vector3(0, 1, -0.25);
-const daylightSkySettings = {
-  turbidity: 5,
-  rayleigh: 2.8,
-  mieCoefficient: 0.004,
-  mieDirectionalG: 0.78,
+const skySunElevation = 26;
+const skySunAzimuth = 170;
+const realisticSkySettings = {
+  turbidity: 2.4,
+  rayleigh: 3.2,
+  mieCoefficient: 0.0045,
+  mieDirectionalG: 0.82,
+  exposure: 0.48,
 };
 const clock = new THREE.Clock();
 
@@ -87,20 +108,28 @@ function createCamera() {
   return camera;
 }
 
-function createDaytimeSky(scene) {
+function createRealisticSky(scene, renderer) {
   const sky = new Sky();
-  sky.name = 'daytime-sky';
+  sky.name = 'realistic-sky';
   sky.scale.setScalar(skyScale);
 
-  sky.material.uniforms.turbidity.value = daylightSkySettings.turbidity;
-  sky.material.uniforms.rayleigh.value = daylightSkySettings.rayleigh;
-  sky.material.uniforms.mieCoefficient.value = daylightSkySettings.mieCoefficient;
-  sky.material.uniforms.mieDirectionalG.value = daylightSkySettings.mieDirectionalG;
-  sky.material.uniforms.sunPosition.value.copy(daylightSunPosition);
+  const skyUniforms = sky.material.uniforms;
+  skyUniforms.turbidity.value = realisticSkySettings.turbidity;
+  skyUniforms.rayleigh.value = realisticSkySettings.rayleigh;
+  skyUniforms.mieCoefficient.value = realisticSkySettings.mieCoefficient;
+  skyUniforms.mieDirectionalG.value = realisticSkySettings.mieDirectionalG;
 
+  const sunPosition = new THREE.Vector3();
+  const phi = THREE.MathUtils.degToRad(90 - skySunElevation);
+  const theta = THREE.MathUtils.degToRad(skySunAzimuth);
+  sunPosition.setFromSphericalCoords(1, phi, theta);
+  skyUniforms.sunPosition.value.copy(sunPosition);
+
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = realisticSkySettings.exposure;
   scene.add(sky);
 
-  return sky;
+  return { sky, sunPosition };
 }
 
 function addLights(scene) {
@@ -584,29 +613,50 @@ async function loadShelf(scene, world, wallBox) {
   return { shelf, shelfBody, shelfColliders, shelfBox };
 }
 
-async function loadPrize(scene, world) {
-  const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(prizePath);
+function getPrizeScale(size, maxSourceSize) {
+  if (size instanceof THREE.Vector3) {
+    const baseScale = maxSourceSize > 0 ? 1 / maxSourceSize : 1;
+
+    return size.clone().multiplyScalar(baseScale);
+  }
+
+  const targetSize = Number.isFinite(size) ? size : 0.15;
+  const uniformScale = maxSourceSize > 0 ? targetSize / maxSourceSize : 1;
+
+  return new THREE.Vector3(uniformScale, uniformScale, uniformScale);
+}
+
+async function loadPrize(scene, world, config, loader) {
+  let gltf;
+
+  try {
+    gltf = await loader.loadAsync(config.path);
+  } catch (error) {
+    console.warn(`${config.path} が見つからない、または読み込めないためスキップします。`, error);
+
+    return null;
+  }
+
   const prizeModel = gltf.scene;
   const prize = new THREE.Group();
-  prize.name = 'dynamic-prize';
+  prize.name = `dynamic-prize-${config.id}`;
 
   prizeModel.updateWorldMatrix(true, true);
   const prizeBox = new THREE.Box3().setFromObject(prizeModel);
   const prizeCenter = prizeBox.getCenter(new THREE.Vector3());
   const prizeSize = prizeBox.getSize(new THREE.Vector3());
   const prizeMaxSize = Math.max(prizeSize.x, prizeSize.y, prizeSize.z);
-  const prizeScale = prizeMaxSize > 0 ? prizeViewMaxSize / prizeMaxSize : 1;
+  const prizeScale = getPrizeScale(config.size, prizeMaxSize);
 
   prizeModel.position.set(
-    -prizeCenter.x * prizeScale,
-    -prizeBox.min.y * prizeScale,
-    -prizeCenter.z * prizeScale,
+    -prizeCenter.x * prizeScale.x,
+    -prizeBox.min.y * prizeScale.y,
+    -prizeCenter.z * prizeScale.z,
   );
-  prizeModel.scale.setScalar(prizeScale);
+  prizeModel.scale.copy(prizeScale);
   prize.add(prizeModel);
-  prize.position.copy(prizePosition);
-  prize.rotation.copy(prizeRotation);
+  prize.position.copy(config.position);
+  prize.rotation.copy(config.rotation);
 
   prize.traverse((child) => {
     if (child.isMesh) {
@@ -618,10 +668,10 @@ async function loadPrize(scene, world) {
   scene.add(prize);
   prize.updateWorldMatrix(true, true);
 
-  const prizeQuaternion = new THREE.Quaternion().setFromEuler(prizeRotation);
+  const prizeQuaternion = new THREE.Quaternion().setFromEuler(config.rotation);
   const prizeBody = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(prizePosition.x, prizePosition.y, prizePosition.z)
+      .setTranslation(config.position.x, config.position.y, config.position.z)
       .setRotation({
         x: prizeQuaternion.x,
         y: prizeQuaternion.y,
@@ -644,15 +694,26 @@ async function loadPrize(scene, world) {
     }
   });
 
-  return { prize, prizeModel, prizeBody, prizeColliders };
+  return { config, prize, prizeModel, prizeBody, prizeColliders };
 }
 
-function syncPrizeMesh(prize) {
-  const position = prize.prizeBody.translation();
-  const rotation = prize.prizeBody.rotation();
+async function loadPrizes(scene, world) {
+  const loader = new GLTFLoader();
+  const loadedPrizes = await Promise.all(
+    prizeConfigs.map((config) => loadPrize(scene, world, config, loader)),
+  );
 
-  prize.prize.position.set(position.x, position.y, position.z);
-  prize.prize.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+  return loadedPrizes.filter(Boolean);
+}
+
+function syncPrizeMeshes(prizes) {
+  prizes.forEach((prize) => {
+    const position = prize.prizeBody.translation();
+    const rotation = prize.prizeBody.rotation();
+
+    prize.prize.position.set(position.x, position.y, position.z);
+    prize.prize.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+  });
 }
 
 function syncRingTraceArea() {
@@ -744,14 +805,13 @@ async function init() {
   await RAPIER.init();
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87ceeb);
 
   const gravity = new RAPIER.Vector3(0, -9.81, 0);
   const world = new RAPIER.World(gravity);
   const renderer = createRenderer();
   const camera = createCamera();
   scene.add(camera);
-  const sky = createDaytimeSky(scene);
+  const sky = createRealisticSky(scene, renderer);
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
@@ -759,7 +819,7 @@ async function init() {
   const ring = setupRingUi();
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
-  const prize = await loadPrize(scene, world);
+  const prizes = await loadPrizes(scene, world);
   const tent = await loadTent(scene);
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
@@ -767,7 +827,7 @@ async function init() {
   const bulletTemplate = await loadBulletTemplate();
   const gunshotSound = createGunshotSound();
   const bullets = [];
-  status.textContent = 'リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。';
+  status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個読み込みました。`;
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -789,7 +849,7 @@ async function init() {
     world.step();
     applyGunAim(gun, ring.aimDirection);
     syncBulletMeshes(bullets);
-    syncPrizeMesh(prize);
+    syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
@@ -810,7 +870,8 @@ async function init() {
     ground,
     wall,
     shelf,
-    prize,
+    prizes,
+    prizeConfigs,
     tent,
     table,
     gun,
