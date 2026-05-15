@@ -38,7 +38,6 @@ const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
 const groundViewMaxSize = 16;
 const groundPosition = new THREE.Vector3(0, 0, 0);
-const groundColliderHalfHeight = 0.05;
 const skyTexturePath = './image/sky.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
@@ -193,30 +192,15 @@ async function loadGround(scene, world) {
   });
 
   scene.add(ground);
+  ground.updateWorldMatrix(true, true);
 
-  const groundColliderHalfExtents = {
-    x: Math.max((groundSize.x * groundScale) / 2, 0.01),
-    y: groundColliderHalfHeight,
-    z: Math.max((groundSize.z * groundScale) / 2, 0.01),
-  };
-  const groundBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.fixed().setTranslation(
-      groundPosition.x,
-      groundPosition.y - groundColliderHalfExtents.y,
-      groundPosition.z,
-    ),
-  );
-  const groundCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(
-      groundColliderHalfExtents.x,
-      groundColliderHalfExtents.y,
-      groundColliderHalfExtents.z,
-    ).setCollisionGroups(environmentCollisionGroup),
-    groundBody,
+  const { body: groundBody, colliders: groundColliders } = createModelTrimeshColliders(
+    world,
+    ground,
   );
   groundCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
 
-  return { ground, groundScale, groundBody, groundCollider, groundColliderHalfExtents };
+  return { ground, groundScale, groundBody, groundColliders };
 }
 
 function frameObjectInView(object, camera) {
