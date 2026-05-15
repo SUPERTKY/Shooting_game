@@ -70,15 +70,14 @@ const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
-const skyScale = 450000;
-const skySunElevation = 26;
-const skySunAzimuth = 170;
-const realisticSkySettings = {
-  turbidity: 2.4,
-  rayleigh: 3.2,
-  mieCoefficient: 0.0045,
-  mieDirectionalG: 0.82,
-  exposure: 0.48,
+const skySunElevation = 42;
+const skySunAzimuth = 135;
+const daytimeEnvironmentSettings = {
+  backgroundColor: new THREE.Color(0x9fd8ff),
+  fogColor: new THREE.Color(0xbfe7ff),
+  fogNear: 18,
+  fogFar: 60,
+  exposure: 0.9,
 };
 const clock = new THREE.Clock();
 
@@ -107,36 +106,36 @@ function createCamera() {
   return camera;
 }
 
-function createRealisticSky(scene, renderer) {
-  const sky = new Sky();
-  sky.name = 'realistic-sky';
-  sky.scale.setScalar(skyScale);
-
-  const skyUniforms = sky.material.uniforms;
-  skyUniforms.turbidity.value = realisticSkySettings.turbidity;
-  skyUniforms.rayleigh.value = realisticSkySettings.rayleigh;
-  skyUniforms.mieCoefficient.value = realisticSkySettings.mieCoefficient;
-  skyUniforms.mieDirectionalG.value = realisticSkySettings.mieDirectionalG;
-
+function configureDaytimeEnvironment(scene, renderer) {
   const sunPosition = new THREE.Vector3();
   const phi = THREE.MathUtils.degToRad(90 - skySunElevation);
   const theta = THREE.MathUtils.degToRad(skySunAzimuth);
   sunPosition.setFromSphericalCoords(1, phi, theta);
-  skyUniforms.sunPosition.value.copy(sunPosition);
 
+  scene.background = daytimeEnvironmentSettings.backgroundColor;
+  scene.fog = new THREE.Fog(
+    daytimeEnvironmentSettings.fogColor,
+    daytimeEnvironmentSettings.fogNear,
+    daytimeEnvironmentSettings.fogFar,
+  );
+
+  renderer.setClearColor(daytimeEnvironmentSettings.backgroundColor, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = realisticSkySettings.exposure;
-  scene.add(sky);
+  renderer.toneMappingExposure = daytimeEnvironmentSettings.exposure;
 
-  return { sky, sunPosition };
+  return {
+    backgroundColor: daytimeEnvironmentSettings.backgroundColor,
+    fog: scene.fog,
+    sunPosition,
+  };
 }
 
-function addLights(scene) {
-  const ambientLight = new THREE.HemisphereLight(0xffffff, 0x38445c, 1.8);
+function addLights(scene, sunPosition) {
+  const ambientLight = new THREE.HemisphereLight(0xffffff, 0x8fc8ff, 1.9);
   scene.add(ambientLight);
 
   const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
-  keyLight.position.set(4, 7, 5);
+  keyLight.position.copy(sunPosition).multiplyScalar(8);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(2048, 2048);
   keyLight.shadow.camera.near = 0.5;
@@ -801,7 +800,7 @@ function applyGunAim(gun, aimDirection) {
 }
 
 async function init() {
-  await RAPIER.init();
+  await RAPIER.init({});
 
   const scene = new THREE.Scene();
 
@@ -810,8 +809,8 @@ async function init() {
   const renderer = createRenderer();
   const camera = createCamera();
   scene.add(camera);
-  const sky = createRealisticSky(scene, renderer);
-  const lights = addLights(scene);
+  const environment = configureDaytimeEnvironment(scene, renderer);
+  const lights = addLights(scene, environment.sunPosition);
   const ground = createGround(scene, world);
 
   status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
@@ -865,6 +864,7 @@ async function init() {
     renderer,
     camera,
     lights,
+    environment,
     ground,
     wall,
     shelf,
