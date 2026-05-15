@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Sky } from 'three/addons/objects/Sky.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 
 const status = document.querySelector('#status');
@@ -36,6 +35,7 @@ const tableViewMaxSize = 1;
 const tentPosition = new THREE.Vector3(0, 0, -2);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
+const skyTexturePath = './image/sky.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
 // 各行の position / rotation / size を変更すると、景品ごとに位置・回転・サイズを調整できます。
@@ -71,15 +71,6 @@ const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
-const skySunElevation = 42;
-const skySunAzimuth = 135;
-const daytimeEnvironmentSettings = {
-  backgroundColor: new THREE.Color(0x9fd8ff),
-  fogColor: new THREE.Color(0xbfe7ff),
-  fogNear: 18,
-  fogFar: 60,
-  exposure: 0.9,
-};
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -107,36 +98,21 @@ function createCamera() {
   return camera;
 }
 
-function configureDaytimeEnvironment(scene, renderer) {
-  const sunPosition = new THREE.Vector3();
-  const phi = THREE.MathUtils.degToRad(90 - skySunElevation);
-  const theta = THREE.MathUtils.degToRad(skySunAzimuth);
-  sunPosition.setFromSphericalCoords(1, phi, theta);
+async function configureBackground(scene) {
+  const textureLoader = new THREE.TextureLoader();
+  const skyTexture = await textureLoader.loadAsync(skyTexturePath);
+  skyTexture.colorSpace = THREE.SRGBColorSpace;
+  scene.background = skyTexture;
 
-  scene.background = daytimeEnvironmentSettings.backgroundColor;
-  scene.fog = new THREE.Fog(
-    daytimeEnvironmentSettings.fogColor,
-    daytimeEnvironmentSettings.fogNear,
-    daytimeEnvironmentSettings.fogFar,
-  );
-
-  renderer.setClearColor(daytimeEnvironmentSettings.backgroundColor, 1);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = daytimeEnvironmentSettings.exposure;
-
-  return {
-    backgroundColor: daytimeEnvironmentSettings.backgroundColor,
-    fog: scene.fog,
-    sunPosition,
-  };
+  return { skyTexture };
 }
 
-function addLights(scene, sunPosition) {
+function addLights(scene) {
   const ambientLight = new THREE.HemisphereLight(0xffffff, 0x8fc8ff, 1.9);
   scene.add(ambientLight);
 
   const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
-  keyLight.position.copy(sunPosition).multiplyScalar(8);
+  keyLight.position.set(4, 6, -4);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(2048, 2048);
   keyLight.shadow.camera.near = 0.5;
@@ -810,8 +786,8 @@ async function init() {
   const renderer = createRenderer();
   const camera = createCamera();
   scene.add(camera);
-  const environment = configureDaytimeEnvironment(scene, renderer);
-  const lights = addLights(scene, environment.sunPosition);
+  const background = await configureBackground(scene);
+  const lights = addLights(scene);
   const ground = createGround(scene, world);
 
   status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
@@ -865,7 +841,7 @@ async function init() {
     renderer,
     camera,
     lights,
-    environment,
+    background,
     ground,
     wall,
     shelf,
@@ -884,5 +860,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '背景画像、壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
