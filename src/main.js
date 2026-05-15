@@ -198,9 +198,9 @@ async function loadGround(scene, world) {
     world,
     ground,
   );
-  groundCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+  const groundCollider = groundColliders[0] ?? null;
 
-  return { ground, groundScale, groundBody, groundColliders };
+  return { ground, groundScale, groundBody, groundCollider, groundColliders };
 }
 
 function frameObjectInView(object, camera) {
