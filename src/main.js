@@ -70,7 +70,16 @@ const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
-const skyColor = 0x87ceeb;
+const skyScale = 450000;
+const skySunElevation = 26;
+const skySunAzimuth = 170;
+const realisticSkySettings = {
+  turbidity: 2.4,
+  rayleigh: 3.2,
+  mieCoefficient: 0.0045,
+  mieDirectionalG: 0.82,
+  exposure: 0.48,
+};
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -96,6 +105,30 @@ function createCamera() {
   camera.lookAt(0, 1.4, 0);
 
   return camera;
+}
+
+function createRealisticSky(scene, renderer) {
+  const sky = new Sky();
+  sky.name = 'realistic-sky';
+  sky.scale.setScalar(skyScale);
+
+  const skyUniforms = sky.material.uniforms;
+  skyUniforms.turbidity.value = realisticSkySettings.turbidity;
+  skyUniforms.rayleigh.value = realisticSkySettings.rayleigh;
+  skyUniforms.mieCoefficient.value = realisticSkySettings.mieCoefficient;
+  skyUniforms.mieDirectionalG.value = realisticSkySettings.mieDirectionalG;
+
+  const sunPosition = new THREE.Vector3();
+  const phi = THREE.MathUtils.degToRad(90 - skySunElevation);
+  const theta = THREE.MathUtils.degToRad(skySunAzimuth);
+  sunPosition.setFromSphericalCoords(1, phi, theta);
+  skyUniforms.sunPosition.value.copy(sunPosition);
+
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = realisticSkySettings.exposure;
+  scene.add(sky);
+
+  return { sky, sunPosition };
 }
 
 function addLights(scene) {
@@ -771,13 +804,13 @@ async function init() {
   await RAPIER.init();
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(skyColor);
 
   const gravity = new RAPIER.Vector3(0, -9.81, 0);
   const world = new RAPIER.World(gravity);
   const renderer = createRenderer();
   const camera = createCamera();
   scene.add(camera);
+  const sky = createRealisticSky(scene, renderer);
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
