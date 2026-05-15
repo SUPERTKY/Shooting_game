@@ -71,7 +71,34 @@ const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
+const collisionGroups = {
+  environment: 0x0001,
+  bullet: 0x0002,
+  prize: 0x0004,
+  tent: 0x0008,
+};
+const environmentCollisionGroup = createCollisionGroup(
+  collisionGroups.environment,
+  collisionGroups.environment | collisionGroups.bullet | collisionGroups.prize,
+);
+const bulletCollisionGroup = createCollisionGroup(
+  collisionGroups.bullet,
+  collisionGroups.environment | collisionGroups.prize | collisionGroups.tent,
+);
+const prizeCollisionGroup = createCollisionGroup(
+  collisionGroups.prize,
+  collisionGroups.environment | collisionGroups.bullet | collisionGroups.prize,
+);
+// テントは弾とだけ衝突する専用グループにして、景品や地面などには反応させない。
+const tentCollisionGroup = createCollisionGroup(
+  collisionGroups.tent,
+  collisionGroups.bullet,
+);
 const clock = new THREE.Clock();
+
+function createCollisionGroup(memberships, filters) {
+  return (memberships << 16) | filters;
+}
 
 function createRenderer() {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -146,7 +173,8 @@ function createGround(scene, world) {
     RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0),
   );
   const groundCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(8, 0.05, 8),
+    RAPIER.ColliderDesc.cuboid(8, 0.05, 8)
+      .setCollisionGroups(environmentCollisionGroup),
     groundBody,
   );
 
@@ -217,7 +245,7 @@ async function loadTable(camera) {
   return { table, tableModel };
 }
 
-async function loadTent(scene) {
+async function loadTent(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(tentPath);
   const tent = gltf.scene;
@@ -246,8 +274,15 @@ async function loadTent(scene) {
   });
 
   scene.add(tent);
+  tent.updateWorldMatrix(true, true);
 
-  return { tent, tentScale };
+  const { body: tentBody, colliders: tentColliders } = createModelTrimeshColliders(
+    world,
+    tent,
+    tentCollisionGroup,
+  );
+
+  return { tent, tentScale, tentBody, tentColliders };
 }
 
 async function loadGun(camera) {
@@ -378,7 +413,9 @@ function createBullet(scene, world, bulletTemplate, gun) {
   );
 
   const collider = world.createCollider(
-    RAPIER.ColliderDesc.ball(bulletTemplate.radius).setRestitution(0.1),
+    RAPIER.ColliderDesc.ball(bulletTemplate.radius)
+      .setRestitution(0.1)
+      .setCollisionGroups(bulletCollisionGroup),
     bulletBody,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -464,7 +501,13 @@ function getMeshColliderData(mesh, root = null) {
   return { vertices, indices };
 }
 
-function createMeshTrimeshCollider(world, body, mesh, root = null) {
+function createMeshTrimeshCollider(
+  world,
+  body,
+  mesh,
+  root = null,
+  collisionGroup = environmentCollisionGroup,
+) {
   const colliderData = getMeshColliderData(mesh, root);
 
   if (!colliderData) {
@@ -472,7 +515,8 @@ function createMeshTrimeshCollider(world, body, mesh, root = null) {
   }
 
   const collider = world.createCollider(
-    RAPIER.ColliderDesc.trimesh(colliderData.vertices, colliderData.indices),
+    RAPIER.ColliderDesc.trimesh(colliderData.vertices, colliderData.indices)
+      .setCollisionGroups(collisionGroup),
     body,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -480,7 +524,13 @@ function createMeshTrimeshCollider(world, body, mesh, root = null) {
   return collider;
 }
 
-function createMeshConvexHullCollider(world, body, mesh, root = null) {
+function createMeshConvexHullCollider(
+  world,
+  body,
+  mesh,
+  root = null,
+  collisionGroup = prizeCollisionGroup,
+) {
   const colliderData = getMeshColliderData(mesh, root);
   const colliderDesc = colliderData
     ? RAPIER.ColliderDesc.convexHull(colliderData.vertices)
@@ -490,6 +540,7 @@ function createMeshConvexHullCollider(world, body, mesh, root = null) {
     return null;
   }
 
+  colliderDesc.setCollisionGroups(collisionGroup);
   const collider = world.createCollider(colliderDesc, body);
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
   collider.setRestitution(0.2);
@@ -497,14 +548,18 @@ function createMeshConvexHullCollider(world, body, mesh, root = null) {
   return collider;
 }
 
-function createModelTrimeshColliders(world, model) {
+function createModelTrimeshColliders(
+  world,
+  model,
+  collisionGroup = environmentCollisionGroup,
+) {
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0));
   const colliders = [];
 
   model.updateWorldMatrix(true, true);
   model.traverse((child) => {
     if (child.isMesh) {
-      const collider = createMeshTrimeshCollider(world, body, child);
+      const collider = createMeshTrimeshCollider(world, body, child, null, collisionGroup);
 
       if (collider) {
         colliders.push(collider);
@@ -541,7 +596,8 @@ async function loadWall(scene, world) {
     RAPIER.RigidBodyDesc.fixed().setTranslation(wallCenter.x, wallCenter.y, wallCenter.z),
   );
   const wallCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(wallSize.x / 2, wallSize.y / 2, wallSize.z / 2),
+    RAPIER.ColliderDesc.cuboid(wallSize.x / 2, wallSize.y / 2, wallSize.z / 2)
+      .setCollisionGroups(environmentCollisionGroup),
     wallBody,
   );
   wallCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -795,7 +851,7 @@ async function init() {
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
   const prizes = await loadPrizes(scene, world);
-  const tent = await loadTent(scene);
+  const tent = await loadTent(scene, world);
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
   const gun = await loadGun(camera);
