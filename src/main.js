@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Sky } from 'three/addons/objects/Sky.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 
 const status = document.querySelector('#status');
@@ -36,6 +35,7 @@ const tableViewMaxSize = 1;
 const tentPosition = new THREE.Vector3(0, 0, -2);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
+const skyTexturePath = './image/sky.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
 // 各行の position / rotation / size を変更すると、景品ごとに位置・回転・サイズを調整できます。
@@ -71,16 +71,34 @@ const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
-const skySunElevation = 42;
-const skySunAzimuth = 135;
-const daytimeEnvironmentSettings = {
-  backgroundColor: new THREE.Color(0x9fd8ff),
-  fogColor: new THREE.Color(0xbfe7ff),
-  fogNear: 18,
-  fogFar: 60,
-  exposure: 0.9,
+const collisionGroups = {
+  environment: 0x0001,
+  bullet: 0x0002,
+  prize: 0x0004,
+  tent: 0x0008,
 };
+const environmentCollisionGroup = createCollisionGroup(
+  collisionGroups.environment,
+  collisionGroups.environment | collisionGroups.bullet | collisionGroups.prize,
+);
+const bulletCollisionGroup = createCollisionGroup(
+  collisionGroups.bullet,
+  collisionGroups.environment | collisionGroups.prize | collisionGroups.tent,
+);
+const prizeCollisionGroup = createCollisionGroup(
+  collisionGroups.prize,
+  collisionGroups.environment | collisionGroups.bullet | collisionGroups.prize,
+);
+// テントは弾とだけ衝突する専用グループにして、景品や地面などには反応させない。
+const tentCollisionGroup = createCollisionGroup(
+  collisionGroups.tent,
+  collisionGroups.bullet,
+);
 const clock = new THREE.Clock();
+
+function createCollisionGroup(memberships, filters) {
+  return (memberships << 16) | filters;
+}
 
 function createRenderer() {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -107,36 +125,21 @@ function createCamera() {
   return camera;
 }
 
-function configureDaytimeEnvironment(scene, renderer) {
-  const sunPosition = new THREE.Vector3();
-  const phi = THREE.MathUtils.degToRad(90 - skySunElevation);
-  const theta = THREE.MathUtils.degToRad(skySunAzimuth);
-  sunPosition.setFromSphericalCoords(1, phi, theta);
+async function configureBackground(scene) {
+  const textureLoader = new THREE.TextureLoader();
+  const skyTexture = await textureLoader.loadAsync(skyTexturePath);
+  skyTexture.colorSpace = THREE.SRGBColorSpace;
+  scene.background = skyTexture;
 
-  scene.background = daytimeEnvironmentSettings.backgroundColor;
-  scene.fog = new THREE.Fog(
-    daytimeEnvironmentSettings.fogColor,
-    daytimeEnvironmentSettings.fogNear,
-    daytimeEnvironmentSettings.fogFar,
-  );
-
-  renderer.setClearColor(daytimeEnvironmentSettings.backgroundColor, 1);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = daytimeEnvironmentSettings.exposure;
-
-  return {
-    backgroundColor: daytimeEnvironmentSettings.backgroundColor,
-    fog: scene.fog,
-    sunPosition,
-  };
+  return { skyTexture };
 }
 
-function addLights(scene, sunPosition) {
+function addLights(scene) {
   const ambientLight = new THREE.HemisphereLight(0xffffff, 0x8fc8ff, 1.9);
   scene.add(ambientLight);
 
   const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
-  keyLight.position.copy(sunPosition).multiplyScalar(8);
+  keyLight.position.set(4, 6, -4);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(2048, 2048);
   keyLight.shadow.camera.near = 0.5;
@@ -170,7 +173,8 @@ function createGround(scene, world) {
     RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0),
   );
   const groundCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(8, 0.05, 8),
+    RAPIER.ColliderDesc.cuboid(8, 0.05, 8)
+      .setCollisionGroups(environmentCollisionGroup),
     groundBody,
   );
 
@@ -241,7 +245,7 @@ async function loadTable(camera) {
   return { table, tableModel };
 }
 
-async function loadTent(scene) {
+async function loadTent(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(tentPath);
   const tent = gltf.scene;
@@ -270,8 +274,15 @@ async function loadTent(scene) {
   });
 
   scene.add(tent);
+  tent.updateWorldMatrix(true, true);
 
-  return { tent, tentScale };
+  const { body: tentBody, colliders: tentColliders } = createModelTrimeshColliders(
+    world,
+    tent,
+    tentCollisionGroup,
+  );
+
+  return { tent, tentScale, tentBody, tentColliders };
 }
 
 async function loadGun(camera) {
@@ -402,7 +413,9 @@ function createBullet(scene, world, bulletTemplate, gun) {
   );
 
   const collider = world.createCollider(
-    RAPIER.ColliderDesc.ball(bulletTemplate.radius).setRestitution(0.1),
+    RAPIER.ColliderDesc.ball(bulletTemplate.radius)
+      .setRestitution(0.1)
+      .setCollisionGroups(bulletCollisionGroup),
     bulletBody,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -488,7 +501,13 @@ function getMeshColliderData(mesh, root = null) {
   return { vertices, indices };
 }
 
-function createMeshTrimeshCollider(world, body, mesh, root = null) {
+function createMeshTrimeshCollider(
+  world,
+  body,
+  mesh,
+  root = null,
+  collisionGroup = environmentCollisionGroup,
+) {
   const colliderData = getMeshColliderData(mesh, root);
 
   if (!colliderData) {
@@ -496,7 +515,8 @@ function createMeshTrimeshCollider(world, body, mesh, root = null) {
   }
 
   const collider = world.createCollider(
-    RAPIER.ColliderDesc.trimesh(colliderData.vertices, colliderData.indices),
+    RAPIER.ColliderDesc.trimesh(colliderData.vertices, colliderData.indices)
+      .setCollisionGroups(collisionGroup),
     body,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -504,7 +524,13 @@ function createMeshTrimeshCollider(world, body, mesh, root = null) {
   return collider;
 }
 
-function createMeshConvexHullCollider(world, body, mesh, root = null) {
+function createMeshConvexHullCollider(
+  world,
+  body,
+  mesh,
+  root = null,
+  collisionGroup = prizeCollisionGroup,
+) {
   const colliderData = getMeshColliderData(mesh, root);
   const colliderDesc = colliderData
     ? RAPIER.ColliderDesc.convexHull(colliderData.vertices)
@@ -514,6 +540,7 @@ function createMeshConvexHullCollider(world, body, mesh, root = null) {
     return null;
   }
 
+  colliderDesc.setCollisionGroups(collisionGroup);
   const collider = world.createCollider(colliderDesc, body);
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
   collider.setRestitution(0.2);
@@ -521,14 +548,18 @@ function createMeshConvexHullCollider(world, body, mesh, root = null) {
   return collider;
 }
 
-function createModelTrimeshColliders(world, model) {
+function createModelTrimeshColliders(
+  world,
+  model,
+  collisionGroup = environmentCollisionGroup,
+) {
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0));
   const colliders = [];
 
   model.updateWorldMatrix(true, true);
   model.traverse((child) => {
     if (child.isMesh) {
-      const collider = createMeshTrimeshCollider(world, body, child);
+      const collider = createMeshTrimeshCollider(world, body, child, null, collisionGroup);
 
       if (collider) {
         colliders.push(collider);
@@ -565,7 +596,8 @@ async function loadWall(scene, world) {
     RAPIER.RigidBodyDesc.fixed().setTranslation(wallCenter.x, wallCenter.y, wallCenter.z),
   );
   const wallCollider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(wallSize.x / 2, wallSize.y / 2, wallSize.z / 2),
+    RAPIER.ColliderDesc.cuboid(wallSize.x / 2, wallSize.y / 2, wallSize.z / 2)
+      .setCollisionGroups(environmentCollisionGroup),
     wallBody,
   );
   wallCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
@@ -810,8 +842,8 @@ async function init() {
   const renderer = createRenderer();
   const camera = createCamera();
   scene.add(camera);
-  const environment = configureDaytimeEnvironment(scene, renderer);
-  const lights = addLights(scene, environment.sunPosition);
+  const background = await configureBackground(scene);
+  const lights = addLights(scene);
   const ground = createGround(scene, world);
 
   status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
@@ -819,7 +851,7 @@ async function init() {
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
   const prizes = await loadPrizes(scene, world);
-  const tent = await loadTent(scene);
+  const tent = await loadTent(scene, world);
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
   const gun = await loadGun(camera);
@@ -865,7 +897,7 @@ async function init() {
     renderer,
     camera,
     lights,
-    environment,
+    background,
     ground,
     wall,
     shelf,
@@ -884,5 +916,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '背景画像、壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
