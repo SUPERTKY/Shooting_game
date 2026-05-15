@@ -38,6 +38,7 @@ const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
 const groundViewMaxSize = 16;
 const groundPosition = new THREE.Vector3(0, 0, 0);
+const groundColliderHalfHeight = 0.05;
 const skyTexturePath = './image/sky.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
@@ -164,7 +165,7 @@ function addLights(scene) {
   return { ambientLight, keyLight, fillLight };
 }
 
-async function loadGround(scene) {
+async function loadGround(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(groundPath);
   const ground = gltf.scene;
@@ -191,10 +192,31 @@ async function loadGround(scene) {
     }
   });
 
-  // Ground.glb は見た目専用として配置し、Rapier の剛体やコライダーは作成しない。
   scene.add(ground);
 
-  return { ground, groundScale };
+  const groundColliderHalfExtents = {
+    x: Math.max((groundSize.x * groundScale) / 2, 0.01),
+    y: groundColliderHalfHeight,
+    z: Math.max((groundSize.z * groundScale) / 2, 0.01),
+  };
+  const groundBody = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(
+      groundPosition.x,
+      groundPosition.y - groundColliderHalfExtents.y,
+      groundPosition.z,
+    ),
+  );
+  const groundCollider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(
+      groundColliderHalfExtents.x,
+      groundColliderHalfExtents.y,
+      groundColliderHalfExtents.z,
+    ).setCollisionGroups(environmentCollisionGroup),
+    groundBody,
+  );
+  groundCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+
+  return { ground, groundScale, groundBody, groundCollider, groundColliderHalfExtents };
 }
 
 function frameObjectInView(object, camera) {
@@ -932,7 +954,7 @@ async function init() {
 
   status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
   const ring = setupRingUi();
-  const ground = await loadGround(scene);
+  const ground = await loadGround(scene, world);
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
   const prizes = await loadPrizes(scene, world);
