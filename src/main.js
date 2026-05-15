@@ -45,7 +45,7 @@ const skyTexturePath = './image/sky.png';
 const prizeConfigs = [
   createPrizeConfig(1, new THREE.Vector3(-0.5, 0.4, -1.65)),
   createPrizeConfig(2, new THREE.Vector3(-0.25, 0.4, -1.65),new THREE.Euler(0, 0, 0),0.3),
-  createPrizeConfig(3, new THREE.Vector3(0, 0.5, -1.65)),new THREE.Euler(0, 0, 0),0.5,
+  createPrizeConfig(3, new THREE.Vector3(0, 0.5, -1.65),new THREE.Euler(0, 0, 0),0.3),
   createPrizeConfig(4, new THREE.Vector3(0.25, 0.5, -1.65)),
   createPrizeConfig(5, new THREE.Vector3(0.5, 0.5, -1.65)),
   createPrizeConfig(6, new THREE.Vector3(-0.5, 0.75, -1.65)),
