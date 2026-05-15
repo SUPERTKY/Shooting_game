@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Sky } from 'three/addons/objects/Sky.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 
 const status = document.querySelector('#status');
@@ -865,7 +864,6 @@ async function init() {
     world,
     renderer,
     camera,
-    sky,
     lights,
     ground,
     wall,
