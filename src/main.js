@@ -71,16 +71,14 @@ const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
-const skyScale = 120;
-const skySunElevation = 24;
+const skySunElevation = 42;
 const skySunAzimuth = 135;
-const realisticSkySettings = {
-  topColor: new THREE.Color(0x3f8fff),
-  horizonColor: new THREE.Color(0xb7dcff),
-  bottomColor: new THREE.Color(0xf4e6c8),
-  offset: 0.18,
-  exponent: 0.85,
-  exposure: 0.8,
+const daytimeEnvironmentSettings = {
+  backgroundColor: new THREE.Color(0x9fd8ff),
+  fogColor: new THREE.Color(0xbfe7ff),
+  fogNear: 18,
+  fogFar: 60,
+  exposure: 0.9,
 };
 const clock = new THREE.Clock();
 
@@ -109,68 +107,36 @@ function createCamera() {
   return camera;
 }
 
-function createRealisticSky(scene, renderer) {
-  const skyGeometry = new THREE.SphereGeometry(skyScale, 32, 15);
-  const skyMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      topColor: { value: realisticSkySettings.topColor },
-      horizonColor: { value: realisticSkySettings.horizonColor },
-      bottomColor: { value: realisticSkySettings.bottomColor },
-      offset: { value: realisticSkySettings.offset },
-      exponent: { value: realisticSkySettings.exponent },
-    },
-    vertexShader: `
-      varying vec3 vWorldPosition;
-
-      void main() {
-        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-        vWorldPosition = worldPosition.xyz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 topColor;
-      uniform vec3 horizonColor;
-      uniform vec3 bottomColor;
-      uniform float offset;
-      uniform float exponent;
-      varying vec3 vWorldPosition;
-
-      void main() {
-        float height = normalize(vWorldPosition + vec3(0.0, offset, 0.0)).y;
-        float skyMix = smoothstep(-0.08, 0.65, height);
-        float topMix = pow(max(height, 0.0), exponent);
-        vec3 horizon = mix(bottomColor, horizonColor, skyMix);
-        vec3 color = mix(horizon, topColor, topMix);
-        gl_FragColor = vec4(color, 1.0);
-      }
-    `,
-    side: THREE.BackSide,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const sky = new THREE.Mesh(skyGeometry, skyMaterial);
-  sky.name = 'realistic-sky';
-  scene.add(sky);
-
+function configureDaytimeEnvironment(scene, renderer) {
   const sunPosition = new THREE.Vector3();
   const phi = THREE.MathUtils.degToRad(90 - skySunElevation);
   const theta = THREE.MathUtils.degToRad(skySunAzimuth);
   sunPosition.setFromSphericalCoords(1, phi, theta);
 
-  renderer.setClearColor(realisticSkySettings.horizonColor, 1);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = realisticSkySettings.exposure;
+  scene.background = daytimeEnvironmentSettings.backgroundColor;
+  scene.fog = new THREE.Fog(
+    daytimeEnvironmentSettings.fogColor,
+    daytimeEnvironmentSettings.fogNear,
+    daytimeEnvironmentSettings.fogFar,
+  );
 
-  return { sky, sunPosition };
+  renderer.setClearColor(daytimeEnvironmentSettings.backgroundColor, 1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = daytimeEnvironmentSettings.exposure;
+
+  return {
+    backgroundColor: daytimeEnvironmentSettings.backgroundColor,
+    fog: scene.fog,
+    sunPosition,
+  };
 }
 
-function addLights(scene) {
-  const ambientLight = new THREE.HemisphereLight(0xffffff, 0x38445c, 1.8);
+function addLights(scene, sunPosition) {
+  const ambientLight = new THREE.HemisphereLight(0xffffff, 0x8fc8ff, 1.9);
   scene.add(ambientLight);
 
   const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
-  keyLight.position.set(4, 7, 5);
+  keyLight.position.copy(sunPosition).multiplyScalar(8);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(2048, 2048);
   keyLight.shadow.camera.near = 0.5;
@@ -844,8 +810,8 @@ async function init() {
   const renderer = createRenderer();
   const camera = createCamera();
   scene.add(camera);
-  const sky = createRealisticSky(scene, renderer);
-  const lights = addLights(scene);
+  const environment = configureDaytimeEnvironment(scene, renderer);
+  const lights = addLights(scene, environment.sunPosition);
   const ground = createGround(scene, world);
 
   status.textContent = '壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
@@ -899,6 +865,7 @@ async function init() {
     renderer,
     camera,
     lights,
+    environment,
     ground,
     wall,
     shelf,
