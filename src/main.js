@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Sky } from 'three/addons/objects/Sky.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 
 const status = document.querySelector('#status');
@@ -71,14 +70,7 @@ const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
-const skyScale = 450000;
-const daylightSunPosition = new THREE.Vector3(0, 1, -0.25);
-const daylightSkySettings = {
-  turbidity: 5,
-  rayleigh: 2.8,
-  mieCoefficient: 0.004,
-  mieDirectionalG: 0.78,
-};
+const skyColor = 0x87ceeb;
 const clock = new THREE.Clock();
 
 function createRenderer() {
@@ -104,22 +96,6 @@ function createCamera() {
   camera.lookAt(0, 1.4, 0);
 
   return camera;
-}
-
-function createDaytimeSky(scene) {
-  const sky = new Sky();
-  sky.name = 'daytime-sky';
-  sky.scale.setScalar(skyScale);
-
-  sky.material.uniforms.turbidity.value = daylightSkySettings.turbidity;
-  sky.material.uniforms.rayleigh.value = daylightSkySettings.rayleigh;
-  sky.material.uniforms.mieCoefficient.value = daylightSkySettings.mieCoefficient;
-  sky.material.uniforms.mieDirectionalG.value = daylightSkySettings.mieDirectionalG;
-  sky.material.uniforms.sunPosition.value.copy(daylightSunPosition);
-
-  scene.add(sky);
-
-  return sky;
 }
 
 function addLights(scene) {
@@ -795,14 +771,13 @@ async function init() {
   await RAPIER.init();
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87ceeb);
+  scene.background = new THREE.Color(skyColor);
 
   const gravity = new RAPIER.Vector3(0, -9.81, 0);
   const world = new RAPIER.World(gravity);
   const renderer = createRenderer();
   const camera = createCamera();
   scene.add(camera);
-  const sky = createDaytimeSky(scene);
   const lights = addLights(scene);
   const ground = createGround(scene, world);
 
@@ -856,7 +831,6 @@ async function init() {
     world,
     renderer,
     camera,
-    sky,
     lights,
     ground,
     wall,
