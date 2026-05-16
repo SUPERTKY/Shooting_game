@@ -78,6 +78,7 @@ const treeConfigs = [
   ),
 ];
 const skyTexturePath = './image/sky.png';
+const pointImagePath = './image/Point.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
 // 各行の position / rotation / size を変更すると、景品ごとに位置・回転・サイズを調整できます。
@@ -95,6 +96,12 @@ const prizeConfigs = [
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
+const prizeDropScoreHeight = 0.12;
+const pointPopupLifetime = 0.85;
+const pointPopupSize = 'min(28vmin, 190px)';
+const pointPopupScreenPadding = 96;
+const pointPopupMinRotation = -90;
+const pointPopupMaxRotation = 90;
 const shelfWallGap = 0.08;
 const shelfScale = 0.85;
 const shelfRotationY = -Math.PI / 2;
@@ -914,6 +921,101 @@ async function loadPrizes(scene, world) {
   return loadedPrizes.filter(Boolean);
 }
 
+function createScoreState() {
+  return {
+    points: 0,
+  };
+}
+
+function getRandomScreenPosition() {
+  const minX = Math.min(pointPopupScreenPadding, window.innerWidth / 2);
+  const minY = Math.min(pointPopupScreenPadding, window.innerHeight / 2);
+  const maxX = Math.max(window.innerWidth - minX, minX);
+  const maxY = Math.max(window.innerHeight - minY, minY);
+
+  return {
+    x: THREE.MathUtils.randFloat(minX, maxX),
+    y: THREE.MathUtils.randFloat(minY, maxY),
+  };
+}
+
+function createPointPopup(pointPopups) {
+  const popup = document.createElement('img');
+  const screenPosition = getRandomScreenPosition();
+  const rotation = THREE.MathUtils.randFloat(
+    pointPopupMinRotation,
+    pointPopupMaxRotation,
+  );
+
+  popup.src = pointImagePath;
+  popup.alt = '';
+  popup.draggable = false;
+  popup.className = 'point-popup';
+  Object.assign(popup.style, {
+    position: 'fixed',
+    left: `${screenPosition.x}px`,
+    top: `${screenPosition.y}px`,
+    zIndex: '4',
+    width: pointPopupSize,
+    height: 'auto',
+    pointerEvents: 'none',
+    userSelect: 'none',
+    transformOrigin: 'center',
+    willChange: 'transform, opacity',
+  });
+
+  document.body.appendChild(popup);
+
+  const baseTransform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+  const animation = popup.animate(
+    [
+      { opacity: 0, transform: `${baseTransform} scale(0.05)`, offset: 0 },
+      { opacity: 1, transform: `${baseTransform} scale(1)`, offset: 0.58 },
+      { opacity: 1, transform: `${baseTransform} scale(1.08)`, offset: 0.86 },
+      { opacity: 0, transform: `${baseTransform} scale(0.02)`, offset: 1 },
+    ],
+    {
+      duration: pointPopupLifetime * 1000,
+      easing: 'cubic-bezier(0.2, 0.9, 0.2, 1)',
+      fill: 'forwards',
+    },
+  );
+
+  const pointPopup = { element: popup, animation };
+  pointPopups.push(pointPopup);
+  animation.finished
+    .catch(() => {})
+    .finally(() => removePointPopup(pointPopups, pointPopup));
+}
+
+function removePointPopup(pointPopups, pointPopup) {
+  pointPopup.element.remove();
+  const index = pointPopups.indexOf(pointPopup);
+
+  if (index !== -1) {
+    pointPopups.splice(index, 1);
+  }
+}
+
+function removePrize(scene, world, prize) {
+  scene.remove(prize.prize);
+  world.removeRigidBody(prize.prizeBody);
+}
+
+function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState) {
+  for (let index = prizes.length - 1; index >= 0; index -= 1) {
+    const prize = prizes[index];
+    const position = prize.prizeBody.translation();
+
+    if (position.y <= prizeDropScoreHeight) {
+      scoreState.points += 1;
+      createPointPopup(pointPopups);
+      removePrize(scene, world, prize);
+      prizes.splice(index, 1);
+    }
+  }
+}
+
 function syncPrizeMeshes(prizes) {
   prizes.forEach((prize) => {
     const position = prize.prizeBody.translation();
@@ -1092,6 +1194,8 @@ async function init() {
   const shootCooldown = createShootCooldown();
   updateCooldownGauge(shootCooldown);
   const bullets = [];
+  const pointPopups = [];
+  const scoreState = createScoreState();
   status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
@@ -1120,6 +1224,7 @@ async function init() {
     applyGunAim(gun, ring.aimDirection);
     tickShootCooldown(shootCooldown, delta);
     syncBulletMeshes(bullets);
+    checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState);
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
     renderer.render(scene, camera);
@@ -1149,6 +1254,8 @@ async function init() {
     table,
     gun,
     bulletTemplate,
+    pointPopups,
+    scoreState,
     gunshotSound,
     shootCooldown,
     bullets,
