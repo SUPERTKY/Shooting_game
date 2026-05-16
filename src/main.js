@@ -1000,18 +1000,22 @@ function createPrize(scene, world, prizeType, slot) {
   };
 }
 
-function getOccupiedPrizeSlotIds(prizes) {
-  const occupiedSlotIds = new Set();
+function hasSpawnedPrizeDisappeared(prize) {
+  return !prize || !prize.prize.parent;
+}
 
-  prizes.forEach((prize) => occupiedSlotIds.add(prize.slot.id));
+function getSpawnedPrizeInSlot(prizes, slot) {
+  return prizes.find((prize) => (
+    prize.slot.id === slot.id && !hasSpawnedPrizeDisappeared(prize)
+  )) ?? null;
+}
 
-  return occupiedSlotIds;
+function isPrizeSlotOccupied(prizes, slot) {
+  return Boolean(getSpawnedPrizeInSlot(prizes, slot));
 }
 
 function getEmptyPrizeSlots(prizes) {
-  const occupiedSlotIds = getOccupiedPrizeSlotIds(prizes);
-
-  return prizeSlotConfigs.filter((slot) => !occupiedSlotIds.has(slot.id));
+  return prizeSlotConfigs.filter((slot) => !isPrizeSlotOccupied(prizes, slot));
 }
 
 function fillInitialPrizeSlots(scene, world, prizeTypes) {
@@ -1029,6 +1033,12 @@ function createPrizeRespawnQueue() {
 }
 
 function schedulePrizeRespawn(respawnQueue, slot) {
+  const hasPendingRespawn = respawnQueue.some((respawn) => respawn.slot.id === slot.id);
+
+  if (hasPendingRespawn) {
+    return;
+  }
+
   respawnQueue.push({
     slot,
     remaining: THREE.MathUtils.randFloat(prizeRespawnMinDelay, prizeRespawnMaxDelay),
@@ -1049,9 +1059,9 @@ function updatePrizeRespawns(scene, world, prizes, prizeTypes, respawnQueue, del
       continue;
     }
 
-    const slot = getRandomArrayItem(getEmptyPrizeSlots(prizes));
+    const { slot } = respawn;
 
-    if (!slot) {
+    if (isPrizeSlotOccupied(prizes, slot)) {
       continue;
     }
 
