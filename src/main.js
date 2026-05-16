@@ -78,7 +78,7 @@ const treeConfigs = [
   ),
 ];
 const skyTexturePath = './image/sky.png';
-const pointImagePath = './image/Point.png';
+const ImagePath = './image/Point.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
 // 各行の position / rotation / size を変更すると、景品ごとに位置・回転・サイズを調整できます。
@@ -96,7 +96,7 @@ const prizeConfigs = [
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
-const prizeDropScoreHeight = 0.12;
+const prizeDropScoreHeight = 0.3;
 const pointPopupLifetime = 0.85;
 const pointPopupSize = 'min(28vmin, 190px)';
 const pointPopupScreenPadding = 96;
