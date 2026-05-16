@@ -29,7 +29,8 @@ const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
 const cameraViewHeightRatio = 0.44;
 const cameraBackDistanceMultiplier = 2.1;
-const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
+const cameraHorizontalOffset = -0.22;
+const gunViewPosition = new THREE.Vector3(0.18, -0.12, -0.55);
 const tableViewPosition = new THREE.Vector3(0, -0.4, -0.5);
 const tableViewRotation = new THREE.Euler(0, 0, 0);
 const tableViewQuaternion = new THREE.Quaternion().setFromEuler(tableViewRotation);
@@ -214,8 +215,10 @@ function frameObjectInView(object, camera) {
 
   const viewHeight = center.y + size.y * cameraViewHeightRatio;
 
-  camera.position.set(center.x, viewHeight, center.z + distance * cameraBackDistanceMultiplier);
-  camera.lookAt(center.x, viewHeight, center.z);
+  const cameraX = center.x + cameraHorizontalOffset;
+
+  camera.position.set(cameraX, viewHeight, center.z + distance * cameraBackDistanceMultiplier);
+  camera.lookAt(cameraX, viewHeight, center.z);
   camera.updateProjectionMatrix();
 }
 
