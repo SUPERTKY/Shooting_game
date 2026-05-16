@@ -184,41 +184,18 @@ const tentCollisionGroup = createCollisionGroup(
   collisionGroups.bullet,
 );
 const clock = new THREE.Clock();
-const maxDevicePixelRatio = 1.5;
-const maxMobileDevicePixelRatio = 1.25;
-const maxRenderFrameRate = 60;
-const minRenderFrameInterval = 1 / maxRenderFrameRate;
-const maxFrameDelta = 0.05;
-const physicsTimestep = 1 / 60;
-const maxPhysicsSubsteps = 3;
-const shadowMapSize = 1024;
-const isLikelyMobileDevice = window.matchMedia('(pointer: coarse)').matches
-  || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const reusableWorldPosition = new THREE.Vector3();
-const reusableWorldRotation = new THREE.Quaternion();
-const reusablePrizeBounds = new THREE.Box3();
-THREE.Cache.enabled = true;
 
 function createCollisionGroup(memberships, filters) {
   return (memberships << 16) | filters;
 }
 
-function getOptimizedPixelRatio() {
-  const pixelRatioCap = isLikelyMobileDevice ? maxMobileDevicePixelRatio : maxDevicePixelRatio;
-
-  return Math.min(window.devicePixelRatio || 1, pixelRatioCap);
-}
-
 function createRenderer() {
-  const renderer = new THREE.WebGLRenderer({
-    antialias: !isLikelyMobileDevice && window.devicePixelRatio <= maxDevicePixelRatio,
-    powerPreference: 'high-performance',
-  });
-  renderer.setPixelRatio(getOptimizedPixelRatio());
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvasContainer.appendChild(renderer.domElement);
 
   return renderer;
@@ -262,7 +239,7 @@ function addLights(scene) {
   const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
   keyLight.position.set(4, 6, -4);
   keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(shadowMapSize, shadowMapSize);
+  keyLight.shadow.mapSize.set(2048, 2048);
   keyLight.shadow.camera.near = 0.5;
   keyLight.shadow.camera.far = 30;
   keyLight.shadow.camera.left = -8;
@@ -276,35 +253,6 @@ function addLights(scene) {
   scene.add(fillLight);
 
   return { ambientLight, keyLight, fillLight };
-}
-
-function freezeStaticObject(object) {
-  object.updateWorldMatrix(true, true);
-  object.traverse((child) => {
-    child.matrixAutoUpdate = false;
-  });
-}
-
-function createModelBoxCollider(
-  world,
-  model,
-  collisionGroup = environmentCollisionGroup,
-) {
-  model.updateWorldMatrix(true, true);
-  const modelBox = new THREE.Box3().setFromObject(model);
-  const modelSize = modelBox.getSize(new THREE.Vector3());
-  const modelCenter = modelBox.getCenter(new THREE.Vector3());
-  const body = world.createRigidBody(
-    RAPIER.RigidBodyDesc.fixed().setTranslation(modelCenter.x, modelCenter.y, modelCenter.z),
-  );
-  const collider = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(modelSize.x / 2, modelSize.y / 2, modelSize.z / 2)
-      .setCollisionGroups(collisionGroup),
-    body,
-  );
-  collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
-
-  return { body, collider, box: modelBox };
 }
 
 async function loadGround(scene, world) {
@@ -337,12 +285,11 @@ async function loadGround(scene, world) {
   scene.add(ground);
   ground.updateWorldMatrix(true, true);
 
-  const { body: groundBody, collider: groundCollider } = createModelBoxCollider(
+  const { body: groundBody, colliders: groundColliders } = createModelTrimeshColliders(
     world,
     ground,
   );
-  const groundColliders = [groundCollider];
-  freezeStaticObject(ground);
+  const groundCollider = groundColliders[0] ?? null;
 
   return { ground, groundScale, groundBody, groundCollider, groundColliders };
 }
@@ -413,8 +360,9 @@ async function loadTable(camera) {
   return { table, tableModel };
 }
 
-function createTree(scene, config, sourceModel) {
-  const treeModel = sourceModel.clone(true);
+async function loadTree(scene, config, loader) {
+  const gltf = await loader.loadAsync(config.path);
+  const treeModel = gltf.scene;
   const tree = new THREE.Group();
   tree.name = `decorative-${config.id}`;
 
@@ -437,28 +385,23 @@ function createTree(scene, config, sourceModel) {
 
   tree.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = false;
-      child.receiveShadow = false;
+      child.castShadow = true;
+      child.receiveShadow = true;
     }
   });
 
   scene.add(tree);
-  freezeStaticObject(tree);
 
   return { config, tree, treeModel, treeScale };
 }
 
 async function loadTrees(scene) {
   const loader = new GLTFLoader();
-  const uniqueTreePaths = [...new Set(treeConfigs.map((config) => config.path))];
-  const treeEntries = await Promise.all(uniqueTreePaths.map(async (path) => {
-    const gltf = await loader.loadAsync(path);
+  const loadedTrees = await Promise.all(
+    treeConfigs.map((config) => loadTree(scene, config, loader)),
+  );
 
-    return [path, gltf.scene];
-  }));
-  const treeModelsByPath = new Map(treeEntries);
-
-  return treeConfigs.map((config) => createTree(scene, config, treeModelsByPath.get(config.path)));
+  return loadedTrees;
 }
 
 async function loadTent(scene, world) {
@@ -484,7 +427,7 @@ async function loadTent(scene, world) {
 
   tent.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = false;
+      child.castShadow = true;
       child.receiveShadow = true;
     }
   });
@@ -492,13 +435,11 @@ async function loadTent(scene, world) {
   scene.add(tent);
   tent.updateWorldMatrix(true, true);
 
-  const { body: tentBody, collider: tentCollider } = createModelBoxCollider(
+  const { body: tentBody, colliders: tentColliders } = createModelTrimeshColliders(
     world,
     tent,
     tentCollisionGroup,
   );
-  const tentColliders = [tentCollider];
-  freezeStaticObject(tent);
 
   return { tent, tentScale, tentBody, tentColliders };
 }
@@ -638,16 +579,14 @@ function updateTrailGeometry(trail, trailPositions, trailPositionBuffer) {
       'position',
       new THREE.BufferAttribute(trailPositionBuffer, 3),
     );
-    trail.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1000);
   }
+
+  trail.geometry.computeBoundingSphere();
 }
 
 function updateBulletTrail(bullet) {
-  for (let index = bullet.trail.positions.length - 1; index > 0; index -= 1) {
-    bullet.trail.positions[index].copy(bullet.trail.positions[index - 1]);
-  }
-
-  bullet.trail.positions[0].copy(bullet.mesh.position);
+  bullet.trail.positions.pop();
+  bullet.trail.positions.unshift(bullet.mesh.position.clone());
   updateTrailGeometry(
     bullet.trail.line,
     bullet.trail.positions,
@@ -719,10 +658,8 @@ function syncBulletMeshes(bullets) {
     const position = bullet.body.translation();
     const rotation = bullet.body.rotation();
 
-    reusableWorldPosition.set(position.x, position.y, position.z);
-    reusableWorldRotation.set(rotation.x, rotation.y, rotation.z, rotation.w);
-    bullet.mesh.position.copy(reusableWorldPosition);
-    bullet.mesh.quaternion.copy(reusableWorldRotation);
+    bullet.mesh.position.set(position.x, position.y, position.z);
+    bullet.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
     updateBulletTrail(bullet);
   });
 }
@@ -892,7 +829,6 @@ async function loadWall(scene, world) {
     wallBody,
   );
   wallCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
-  freezeStaticObject(wall);
 
   return { wall, wallBody, wallCollider, wallBox };
 }
@@ -932,7 +868,6 @@ async function loadShelf(scene, world, wallBox) {
     world,
     shelf,
   );
-  freezeStaticObject(shelf);
 
   return { shelf, shelfBody, shelfColliders, shelfBox };
 }
@@ -1220,30 +1155,6 @@ function removePointPopup(pointPopups, pointPopup) {
   }
 }
 
-function syncPrizeMesh(prize) {
-  const position = prize.prizeBody.translation();
-  const rotation = prize.prizeBody.rotation();
-
-  reusableWorldPosition.set(position.x, position.y, position.z);
-  reusableWorldRotation.set(rotation.x, rotation.y, rotation.z, rotation.w);
-  prize.prize.position.copy(reusableWorldPosition);
-  prize.prize.quaternion.copy(reusableWorldRotation);
-}
-
-function getPrizeDropY(prize) {
-  syncPrizeMesh(prize);
-  prize.prize.updateWorldMatrix(true, true);
-  reusablePrizeBounds.setFromObject(prize.prize);
-
-  if (!reusablePrizeBounds.isEmpty()) {
-    return reusablePrizeBounds.min.y;
-  }
-
-  const position = prize.prizeBody.translation();
-
-  return position.y;
-}
-
 function removePrize(scene, world, prize) {
   scene.remove(prize.prize);
   world.removeRigidBody(prize.prizeBody);
@@ -1252,9 +1163,9 @@ function removePrize(scene, world, prize) {
 function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, respawnQueue) {
   for (let index = prizes.length - 1; index >= 0; index -= 1) {
     const prize = prizes[index];
-    const dropY = getPrizeDropY(prize);
+    const position = prize.prizeBody.translation();
 
-    if (dropY <= prizeDropScoreHeight) {
+    if (position.y <= prizeDropScoreHeight) {
       scoreState.points += 1;
       createPointPopup(pointPopups);
       removePrize(scene, world, prize);
@@ -1265,7 +1176,13 @@ function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, respa
 }
 
 function syncPrizeMeshes(prizes) {
-  prizes.forEach(syncPrizeMesh);
+  prizes.forEach((prize) => {
+    const position = prize.prizeBody.translation();
+    const rotation = prize.prizeBody.rotation();
+
+    prize.prize.position.set(position.x, position.y, position.z);
+    prize.prize.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+  });
 }
 
 function syncRingTraceArea() {
@@ -1446,7 +1363,6 @@ async function init() {
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setPixelRatio(getOptimizedPixelRatio());
     renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
@@ -1463,34 +1379,10 @@ async function init() {
     startShootCooldown(shootCooldown);
   });
 
-  let accumulatedPhysicsTime = 0;
-  let accumulatedRenderTime = 0;
-
   function animate() {
-    requestAnimationFrame(animate);
-
-    const frameDelta = Math.min(clock.getDelta(), maxFrameDelta);
-    accumulatedRenderTime += frameDelta;
-
-    if (accumulatedRenderTime < minRenderFrameInterval) {
-      return;
-    }
-
-    const delta = Math.min(accumulatedRenderTime, maxFrameDelta);
-    accumulatedRenderTime = 0;
-    accumulatedPhysicsTime = Math.min(
-      accumulatedPhysicsTime + delta,
-      physicsTimestep * maxPhysicsSubsteps,
-    );
-
-    let physicsSteps = 0;
-    while (accumulatedPhysicsTime >= physicsTimestep && physicsSteps < maxPhysicsSubsteps) {
-      world.timestep = physicsTimestep;
-      world.step();
-      accumulatedPhysicsTime -= physicsTimestep;
-      physicsSteps += 1;
-    }
-
+    const delta = Math.min(clock.getDelta(), 0.05);
+    world.timestep = delta;
+    world.step();
     applyGunAim(gun, ring.aimDirection);
     tickShootCooldown(shootCooldown, delta);
     syncBulletMeshes(bullets);
@@ -1500,6 +1392,7 @@ async function init() {
     pruneBullets(scene, world, bullets, delta);
     updatePointPopups(pointPopups);
     renderer.render(scene, camera);
+    requestAnimationFrame(animate);
   }
 
   animate();
