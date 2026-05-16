@@ -124,10 +124,10 @@ const prizeSlotConfigs = [
   createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.6, -2), { sizeScale: 1 }),
   createPrizeSlotConfig(5, new THREE.Vector3(0, 0.6, -2), { sizeScale: 1 }),
   createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.6, -2), { sizeScale: 1 }),
-  createPrizeSlotConfig(7, new THREE.Vector3(-0.25, 0.75, -1.65), { sizeScale: 1 }),
-  createPrizeSlotConfig(8, new THREE.Vector3(0, 0.75, -1.65), { sizeScale: 1 }),
-  createPrizeSlotConfig(9, new THREE.Vector3(0.25, 0.75, -1.65), { sizeScale: 1 }),
-  createPrizeSlotConfig(10, new THREE.Vector3(0.5, 0.75, -1.65), { sizeScale: 1 }),
+  createPrizeSlotConfig(7, new THREE.Vector3(-0.25, 0.8, -2.35), { sizeScale: 1 }),
+  createPrizeSlotConfig(8, new THREE.Vector3(0, 0.8, -2.35), { sizeScale: 1 }),
+  createPrizeSlotConfig(9, new THREE.Vector3(0.25, 0.8, -2.35), { sizeScale: 1 }),
+  createPrizeSlotConfig(10, new THREE.Vector3(0.5, 0.8, -2.35), { sizeScale: 1 }),
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
