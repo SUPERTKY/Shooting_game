@@ -22,18 +22,27 @@ const treePaths = {
   tree2: './tree/tree_2.glb',
 };
 const maxPrizeCount = 10;
+const defaultPrizeSize = 0.15;
+const defaultPrizeSlotSizeScale = 1;
 const prizeRespawnMinDelay = 7;
 const prizeRespawnMaxDelay = 12;
-const createPrizeTypeConfig = (id, size = 0.15, rotation = new THREE.Euler(0, 0, 0)) => ({
+const createPrizeTypeConfig = (id, {
+  size = defaultPrizeSize,
+  rotation = new THREE.Euler(0, 0, 0),
+} = {}) => ({
   id,
   path: `./Prize/Prize_${id}.glb`,
   size,
   rotation,
 });
-const createPrizeSlotConfig = (id, position, rotation = new THREE.Euler(0, 0, 0)) => ({
+const createPrizeSlotConfig = (id, position, {
+  rotation = new THREE.Euler(0, 0, 0),
+  sizeScale = defaultPrizeSlotSizeScale,
+} = {}) => ({
   id,
   position,
   rotation,
+  sizeScale,
 });
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
@@ -87,27 +96,38 @@ const skyTexturePath = './image/sky.png';
 const pointImagePath = './image/Point.png';
 // 景品タイプは Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加・読み込み失敗のファイルはスキップし、読み込めたタイプだけをランダム配置に使います。
-// size は景品タイプごとの見た目サイズです。位置は prizeSlotConfigs で固定します。
+// prizeSizeByTypeId に景品タイプごとの見た目サイズを設定できます。
+// 数値はモデルの最大辺をそろえるサイズ、THREE.Vector3 は幅・高さ・奥行きを個別指定するサイズです。
+const prizeSizeByTypeId = {
+  1: 0.15,
+  2: 0.3,
+  3: 0.2,
+  4: 0.15,
+  5: 0.15,
+  6: 0.15,
+  7: 0.15,
+  8: 0.15,
+  9: 0.15,
+  10: 0.15,
+};
 const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
   const id = index + 1;
-  const prizeSizes = {
-    2: 0.3,
-    3: 0.2,
-  };
 
-  return createPrizeTypeConfig(id, prizeSizes[id] ?? 0.15);
+  return createPrizeTypeConfig(id, { size: prizeSizeByTypeId[id] ?? defaultPrizeSize });
 });
+// sizeScale は配置スロットごとの倍率です。
+// 同じ景品タイプでも置き場所ごとに大きさを変えたい場合に指定します。
 const prizeSlotConfigs = [
-  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.4, -1.65)),
-  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.4, -1.65)),
-  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.4, -1.65)),
-  createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.6, -2)),
-  createPrizeSlotConfig(5, new THREE.Vector3(0, 0.6, -2)),
-  createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.6, -2)),
-  createPrizeSlotConfig(7, new THREE.Vector3(-0.25, 0.75, -1.65)),
-  createPrizeSlotConfig(8, new THREE.Vector3(0, 0.75, -1.65)),
-  createPrizeSlotConfig(9, new THREE.Vector3(0.25, 0.75, -1.65)),
-  createPrizeSlotConfig(10, new THREE.Vector3(0.5, 0.75, -1.65)),
+  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.4, -1.65), { sizeScale: 1 }),
+  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.4, -1.65), { sizeScale: 1 }),
+  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.4, -1.65), { sizeScale: 1 }),
+  createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.6, -2), { sizeScale: 1 }),
+  createPrizeSlotConfig(5, new THREE.Vector3(0, 0.6, -2), { sizeScale: 1 }),
+  createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.6, -2), { sizeScale: 1 }),
+  createPrizeSlotConfig(7, new THREE.Vector3(-0.25, 0.75, -1.65), { sizeScale: 1 }),
+  createPrizeSlotConfig(8, new THREE.Vector3(0, 0.75, -1.65), { sizeScale: 1 }),
+  createPrizeSlotConfig(9, new THREE.Vector3(0.25, 0.75, -1.65), { sizeScale: 1 }),
+  createPrizeSlotConfig(10, new THREE.Vector3(0.5, 0.75, -1.65), { sizeScale: 1 }),
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
@@ -859,10 +879,21 @@ function getPrizeScale(size, maxSourceSize) {
     return size.clone().multiplyScalar(baseScale);
   }
 
-  const targetSize = Number.isFinite(size) ? size : 0.15;
+  const targetSize = Number.isFinite(size) ? size : defaultPrizeSize;
   const uniformScale = maxSourceSize > 0 ? targetSize / maxSourceSize : 1;
 
   return new THREE.Vector3(uniformScale, uniformScale, uniformScale);
+}
+
+function applyPrizeSlotSizeScale(prizeModel, sizeScale) {
+  if (sizeScale instanceof THREE.Vector3) {
+    prizeModel.scale.multiply(sizeScale);
+
+    return;
+  }
+
+  const uniformSizeScale = Number.isFinite(sizeScale) ? sizeScale : defaultPrizeSlotSizeScale;
+  prizeModel.scale.multiplyScalar(uniformSizeScale);
 }
 
 async function loadPrizeType(config, loader) {
@@ -922,6 +953,8 @@ function getRandomArrayItem(items) {
 
 function createPrize(scene, world, prizeType, slot) {
   const prizeModel = prizeType.prizeModel.clone(true);
+  applyPrizeSlotSizeScale(prizeModel, slot.sizeScale);
+
   const prize = new THREE.Group();
   prize.name = `dynamic-prize-slot-${slot.id}-type-${prizeType.config.id}`;
   prize.add(prizeModel);
@@ -1370,6 +1403,7 @@ async function init() {
     prizes,
     prizeTypes,
     prizeTypeConfigs,
+    prizeSizeByTypeId,
     prizeSlotConfigs,
     prizeRespawnQueue,
     tent,

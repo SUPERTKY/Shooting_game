@@ -12,6 +12,13 @@ python3 -m http.server 8000
 
 その後、ブラウザで <http://localhost:8000/> にアクセスしてください。
 
+
+## 景品サイズの設定
+
+`src/main.js` の `prizeSizeByTypeId` で、`Prize/Prize_1.glb` 〜 `Prize/Prize_10.glb` の景品タイプごとの表示サイズを設定できます。数値を指定するとモデルの最大辺がそのサイズにそろい、`new THREE.Vector3(幅, 高さ, 奥行き)` を指定すると軸ごとのサイズを個別に設定できます。
+
+同じ景品タイプでも配置場所ごとに大きさを変えたい場合は、`prizeSlotConfigs` の `sizeScale` を変更してください。
+
 ## ライブラリ
 
 - three.js は import map で CDN から読み込みます。
