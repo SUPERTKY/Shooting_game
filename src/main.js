@@ -78,7 +78,7 @@ const treeConfigs = [
   ),
 ];
 const skyTexturePath = './image/sky.png';
-const ImagePath = './image/Point.png';
+const pointImagePath = './image/Point.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
 // 各行の position / rotation / size を変更すると、景品ごとに位置・回転・サイズを調整できます。
@@ -177,6 +177,15 @@ function createCamera() {
   camera.lookAt(0, 1.4, 0);
 
   return camera;
+}
+
+
+async function loadPointTexture() {
+  const textureLoader = new THREE.TextureLoader();
+  const pointTexture = await textureLoader.loadAsync(pointImagePath);
+  pointTexture.colorSpace = THREE.SRGBColorSpace;
+
+  return pointTexture;
 }
 
 async function configureBackground(scene) {
@@ -988,6 +997,15 @@ function createPointPopup(pointPopups) {
     .finally(() => removePointPopup(pointPopups, pointPopup));
 }
 
+
+function updatePointPopups(pointPopups) {
+  for (let index = pointPopups.length - 1; index >= 0; index -= 1) {
+    if (!pointPopups[index].element.isConnected) {
+      pointPopups.splice(index, 1);
+    }
+  }
+}
+
 function removePointPopup(pointPopups, pointPopup) {
   pointPopup.element.remove();
   const index = pointPopups.indexOf(pointPopup);
@@ -1228,7 +1246,7 @@ async function init() {
     checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState);
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
-    updatePointPopups(scene, pointPopups, delta);
+    updatePointPopups(pointPopups);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
@@ -1256,6 +1274,7 @@ async function init() {
     table,
     gun,
     bulletTemplate,
+    pointTexture,
     pointPopups,
     scoreState,
     gunshotSound,
