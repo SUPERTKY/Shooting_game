@@ -118,16 +118,16 @@ const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
 // sizeScale は配置スロットごとの倍率です。
 // 同じ景品タイプでも置き場所ごとに大きさを変えたい場合に指定します。
 const prizeSlotConfigs = [
-  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.35, -1.45), { sizeScale: 1 }),
-  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.35, -1.45), { sizeScale: 1 }),
-  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.35, -1.45), { sizeScale: 1 }),
-  createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.45, -1.8), { sizeScale: 1 }),
-  createPrizeSlotConfig(5, new THREE.Vector3(0, 0.45, -1.8), { sizeScale: 1 }),
-  createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.45, -1.8), { sizeScale: 1 }),
-  createPrizeSlotConfig(7, new THREE.Vector3(-0.7, 0.65, -2.15), { sizeScale: 1 }),
-  createPrizeSlotConfig(8, new THREE.Vector3(0.4, 0.65, -2.15), { sizeScale: 1 }),
-  createPrizeSlotConfig(9, new THREE.Vector3(0.4, 0.65, -2.15), { sizeScale: 1 }),
-  createPrizeSlotConfig(10, new THREE.Vector3(0.7, 0.65, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.37, -1.45), { sizeScale: 1 }),
+  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.37, -1.45), { sizeScale: 1 }),
+  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.37, -1.45), { sizeScale: 1 }),
+  createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.47, -1.8), { sizeScale: 1 }),
+  createPrizeSlotConfig(5, new THREE.Vector3(0, 0.47, -1.8), { sizeScale: 1 }),
+  createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.47, -1.8), { sizeScale: 1 }),
+  createPrizeSlotConfig(7, new THREE.Vector3(-0.7, 0.67, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(8, new THREE.Vector3(0.4, 0.67, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(9, new THREE.Vector3(0.4, 0.67, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(10, new THREE.Vector3(0.7, 0.67, -2.15), { sizeScale: 1 }),
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
