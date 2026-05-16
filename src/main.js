@@ -1178,7 +1178,7 @@ async function init() {
   const background = await configureBackground(scene);
   const lights = addLights(scene);
 
-  status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
+  status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、ポイント画像、UIリングを読み込み中...';
   const ring = setupRingUi();
   const ground = await loadGround(scene, world);
   const wall = await loadWall(scene, world);
@@ -1190,6 +1190,7 @@ async function init() {
   const table = await loadTable(camera);
   const gun = await loadGun(camera);
   const bulletTemplate = await loadBulletTemplate();
+  const pointTexture = await loadPointTexture();
   const gunshotSound = createGunshotSound();
   const shootCooldown = createShootCooldown();
   updateCooldownGauge(shootCooldown);
@@ -1227,6 +1228,7 @@ async function init() {
     checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState);
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
+    updatePointPopups(scene, pointPopups, delta);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
@@ -1266,5 +1268,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '背景画像、地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '背景画像、地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、ポイント画像、UIリング、またはライブラリの読み込みに失敗しました。';
 });
