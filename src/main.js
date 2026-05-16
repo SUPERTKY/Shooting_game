@@ -24,15 +24,18 @@ const treePaths = {
 const maxPrizeCount = 10;
 const defaultPrizeSize = 0.15;
 const defaultPrizeSlotSizeScale = 1;
+const defaultPrizeHeightScale = 1;
 const prizeRespawnMinDelay = 7;
 const prizeRespawnMaxDelay = 12;
 const createPrizeTypeConfig = (id, {
   size = defaultPrizeSize,
+  heightScale = defaultPrizeHeightScale,
   rotation = new THREE.Euler(0, 0, 0),
 } = {}) => ({
   id,
   path: `./Prize/Prize_${id}.glb`,
   size,
+  heightScale,
   rotation,
 });
 const createPrizeSlotConfig = (id, position, {
@@ -98,6 +101,7 @@ const pointImagePath = './image/Point.png';
 // 未追加・読み込み失敗のファイルはスキップし、読み込めたタイプだけをランダム配置に使います。
 // prizeSizeByTypeId に景品タイプごとの見た目サイズを設定できます。
 // 数値はモデルの最大辺をそろえるサイズ、THREE.Vector3 は幅・高さ・奥行きを個別指定するサイズです。
+// Prize_4 / Prize_5 / Prize_7 / Prize_8 の高さだけを変えたい場合は prizeHeightScaleByTypeId の倍率を変更します。
 const prizeSizeByTypeId = {
   1: 0.15,
   2: 0.3,
@@ -110,10 +114,19 @@ const prizeSizeByTypeId = {
   9: 0.15,
   10: 0.15,
 };
+const prizeHeightScaleByTypeId = {
+  4: 1,
+  5: 1,
+  7: 1,
+  8: 1,
+};
 const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
   const id = index + 1;
 
-  return createPrizeTypeConfig(id, { size: prizeSizeByTypeId[id] ?? defaultPrizeSize });
+  return createPrizeTypeConfig(id, {
+    size: prizeSizeByTypeId[id] ?? defaultPrizeSize,
+    heightScale: prizeHeightScaleByTypeId[id] ?? defaultPrizeHeightScale,
+  });
 });
 // sizeScale は配置スロットごとの倍率です。
 // 同じ景品タイプでも置き場所ごとに大きさを変えたい場合に指定します。
@@ -970,6 +983,10 @@ async function loadPrizeType(config, loader) {
   const prizeSize = prizeBox.getSize(new THREE.Vector3());
   const prizeMaxSize = Math.max(prizeSize.x, prizeSize.y, prizeSize.z);
   const prizeScale = getPrizeScale(config.size, prizeMaxSize);
+  const heightScale = Number.isFinite(config.heightScale)
+    ? config.heightScale
+    : defaultPrizeHeightScale;
+  prizeScale.y *= heightScale;
 
   prizeModel.position.set(
     -prizeCenter.x * prizeScale.x,
