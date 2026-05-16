@@ -99,11 +99,11 @@ const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
 });
 const prizeSlotConfigs = [
   createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.4, -1.65)),
-  createPrizeSlotConfig(2, new THREE.Vector3(-0.25, 0.4, -1.65)),
-  createPrizeSlotConfig(3, new THREE.Vector3(0, 0.5, -1.65)),
-  createPrizeSlotConfig(4, new THREE.Vector3(0.25, 0.5, -1.65)),
-  createPrizeSlotConfig(5, new THREE.Vector3(0.5, 0.5, -1.65)),
-  createPrizeSlotConfig(6, new THREE.Vector3(-0.5, 0.75, -1.65)),
+  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.4, -1.65)),
+  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.4, -1.65)),
+  createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.6, -2)),
+  createPrizeSlotConfig(5, new THREE.Vector3(0, 0.6, -2)),
+  createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.6, -2)),
   createPrizeSlotConfig(7, new THREE.Vector3(-0.25, 0.75, -1.65)),
   createPrizeSlotConfig(8, new THREE.Vector3(0, 0.75, -1.65)),
   createPrizeSlotConfig(9, new THREE.Vector3(0.25, 0.75, -1.65)),
