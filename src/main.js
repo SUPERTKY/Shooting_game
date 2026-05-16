@@ -125,8 +125,8 @@ const prizeSlotConfigs = [
   createPrizeSlotConfig(5, new THREE.Vector3(0, 0.5, -1.8), { sizeScale: 1 }),
   createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.5, -1.8), { sizeScale: 1 }),
   createPrizeSlotConfig(7, new THREE.Vector3(-0.7, 0.7, -2.15), { sizeScale: 1 }),
-  createPrizeSlotConfig(8, new THREE.Vector3(-0.4, 0.7, -2.15), { sizeScale: 1 }),
-  createPrizeSlotConfig(9, new THREE.Vector3(0.4, 0.7, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(8, new THREE.Vector3(-0.3, 0.7, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(9, new THREE.Vector3(0.3, 0.7, -2.15), { sizeScale: 1 }),
   createPrizeSlotConfig(10, new THREE.Vector3(0.7, 0.7, -2.15), { sizeScale: 1 }),
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
