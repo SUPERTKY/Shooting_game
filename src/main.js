@@ -22,12 +22,18 @@ const treePaths = {
   tree2: './tree/tree_2.glb',
 };
 const maxPrizeCount = 10;
-const createPrizeConfig = (id, position, rotation = new THREE.Euler(0, 0, 0), size = 0.15) => ({
+const prizeRespawnMinDelay = 7;
+const prizeRespawnMaxDelay = 12;
+const createPrizeTypeConfig = (id, size = 0.15, rotation = new THREE.Euler(0, 0, 0)) => ({
   id,
   path: `./Prize/Prize_${id}.glb`,
+  size,
+  rotation,
+});
+const createPrizeSlotConfig = (id, position, rotation = new THREE.Euler(0, 0, 0)) => ({
+  id,
   position,
   rotation,
-  size,
 });
 const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
@@ -79,20 +85,29 @@ const treeConfigs = [
 ];
 const skyTexturePath = './image/sky.png';
 const pointImagePath = './image/Point.png';
-// 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
-// 未追加のファイルは読み込み時にスキップされます。
-// 各行の position / rotation / size を変更すると、景品ごとに位置・回転・サイズを調整できます。
-const prizeConfigs = [
-  createPrizeConfig(1, new THREE.Vector3(-0.5, 0.4, -1.65)),
-  createPrizeConfig(2, new THREE.Vector3(-0.25, 0.4, -1.65),new THREE.Euler(0, 0, 0),0.3),
-  createPrizeConfig(3, new THREE.Vector3(0, 0.5, -1.65),new THREE.Euler(0, 0, 0),0.2),
-  createPrizeConfig(4, new THREE.Vector3(0.25, 0.5, -1.65)),
-  createPrizeConfig(5, new THREE.Vector3(0.5, 0.5, -1.65)),
-  createPrizeConfig(6, new THREE.Vector3(-0.5, 0.75, -1.65)),
-  createPrizeConfig(7, new THREE.Vector3(-0.25, 0.75, -1.65)),
-  createPrizeConfig(8, new THREE.Vector3(0, 0.75, -1.65)),
-  createPrizeConfig(9, new THREE.Vector3(0.25, 0.75, -1.65)),
-  createPrizeConfig(10, new THREE.Vector3(0.5, 0.75, -1.65)),
+// 景品タイプは Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
+// 未追加・読み込み失敗のファイルはスキップし、読み込めたタイプだけをランダム配置に使います。
+// size は景品タイプごとの見た目サイズです。位置は prizeSlotConfigs で固定します。
+const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
+  const id = index + 1;
+  const prizeSizes = {
+    2: 0.3,
+    3: 0.2,
+  };
+
+  return createPrizeTypeConfig(id, prizeSizes[id] ?? 0.15);
+});
+const prizeSlotConfigs = [
+  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.4, -1.65)),
+  createPrizeSlotConfig(2, new THREE.Vector3(-0.25, 0.4, -1.65)),
+  createPrizeSlotConfig(3, new THREE.Vector3(0, 0.5, -1.65)),
+  createPrizeSlotConfig(4, new THREE.Vector3(0.25, 0.5, -1.65)),
+  createPrizeSlotConfig(5, new THREE.Vector3(0.5, 0.5, -1.65)),
+  createPrizeSlotConfig(6, new THREE.Vector3(-0.5, 0.75, -1.65)),
+  createPrizeSlotConfig(7, new THREE.Vector3(-0.25, 0.75, -1.65)),
+  createPrizeSlotConfig(8, new THREE.Vector3(0, 0.75, -1.65)),
+  createPrizeSlotConfig(9, new THREE.Vector3(0.25, 0.75, -1.65)),
+  createPrizeSlotConfig(10, new THREE.Vector3(0.5, 0.75, -1.65)),
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
@@ -850,7 +865,7 @@ function getPrizeScale(size, maxSourceSize) {
   return new THREE.Vector3(uniformScale, uniformScale, uniformScale);
 }
 
-async function loadPrize(scene, world, config, loader) {
+async function loadPrizeType(config, loader) {
   let gltf;
 
   try {
@@ -862,8 +877,6 @@ async function loadPrize(scene, world, config, loader) {
   }
 
   const prizeModel = gltf.scene;
-  const prize = new THREE.Group();
-  prize.name = `dynamic-prize-${config.id}`;
 
   prizeModel.updateWorldMatrix(true, true);
   const prizeBox = new THREE.Box3().setFromObject(prizeModel);
@@ -877,25 +890,51 @@ async function loadPrize(scene, world, config, loader) {
     -prizeBox.min.y * prizeScale.y,
     -prizeCenter.z * prizeScale.z,
   );
+  prizeModel.rotation.copy(config.rotation);
   prizeModel.scale.copy(prizeScale);
-  prize.add(prizeModel);
-  prize.position.copy(config.position);
-  prize.rotation.copy(config.rotation);
 
-  prize.traverse((child) => {
+  prizeModel.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
     }
   });
 
+  return { config, prizeModel };
+}
+
+async function loadPrizeTypes() {
+  const loader = new GLTFLoader();
+  const loadedPrizeTypes = await Promise.all(
+    prizeTypeConfigs.map((config) => loadPrizeType(config, loader)),
+  );
+
+  return loadedPrizeTypes.filter(Boolean);
+}
+
+function getRandomArrayItem(items) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function createPrize(scene, world, prizeType, slot) {
+  const prizeModel = prizeType.prizeModel.clone(true);
+  const prize = new THREE.Group();
+  prize.name = `dynamic-prize-slot-${slot.id}-type-${prizeType.config.id}`;
+  prize.add(prizeModel);
+  prize.position.copy(slot.position);
+  prize.rotation.copy(slot.rotation);
+
   scene.add(prize);
   prize.updateWorldMatrix(true, true);
 
-  const prizeQuaternion = new THREE.Quaternion().setFromEuler(config.rotation);
+  const prizeQuaternion = new THREE.Quaternion().setFromEuler(slot.rotation);
   const prizeBody = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(config.position.x, config.position.y, config.position.z)
+      .setTranslation(slot.position.x, slot.position.y, slot.position.z)
       .setRotation({
         x: prizeQuaternion.x,
         y: prizeQuaternion.y,
@@ -918,16 +957,74 @@ async function loadPrize(scene, world, config, loader) {
     }
   });
 
-  return { config, prize, prizeModel, prizeBody, prizeColliders };
+  return {
+    config: prizeType.config,
+    slot,
+    prize,
+    prizeModel,
+    prizeBody,
+    prizeColliders,
+  };
 }
 
-async function loadPrizes(scene, world) {
-  const loader = new GLTFLoader();
-  const loadedPrizes = await Promise.all(
-    prizeConfigs.map((config) => loadPrize(scene, world, config, loader)),
-  );
+function getOccupiedPrizeSlotIds(prizes) {
+  const occupiedSlotIds = new Set();
 
-  return loadedPrizes.filter(Boolean);
+  prizes.forEach((prize) => occupiedSlotIds.add(prize.slot.id));
+
+  return occupiedSlotIds;
+}
+
+function getEmptyPrizeSlots(prizes) {
+  const occupiedSlotIds = getOccupiedPrizeSlotIds(prizes);
+
+  return prizeSlotConfigs.filter((slot) => !occupiedSlotIds.has(slot.id));
+}
+
+function fillInitialPrizeSlots(scene, world, prizeTypes) {
+  if (prizeTypes.length === 0) {
+    return [];
+  }
+
+  return prizeSlotConfigs.map((slot) => (
+    createPrize(scene, world, getRandomArrayItem(prizeTypes), slot)
+  ));
+}
+
+function createPrizeRespawnQueue() {
+  return [];
+}
+
+function schedulePrizeRespawn(respawnQueue, slot) {
+  respawnQueue.push({
+    slot,
+    remaining: THREE.MathUtils.randFloat(prizeRespawnMinDelay, prizeRespawnMaxDelay),
+  });
+}
+
+function updatePrizeRespawns(scene, world, prizes, prizeTypes, respawnQueue, delta) {
+  if (prizeTypes.length === 0) {
+    respawnQueue.length = 0;
+    return;
+  }
+
+  for (let index = respawnQueue.length - 1; index >= 0; index -= 1) {
+    const respawn = respawnQueue[index];
+    respawn.remaining -= delta;
+
+    if (respawn.remaining > 0) {
+      continue;
+    }
+
+    const slot = getRandomArrayItem(getEmptyPrizeSlots(prizes));
+
+    if (!slot) {
+      continue;
+    }
+
+    prizes.push(createPrize(scene, world, getRandomArrayItem(prizeTypes), slot));
+    respawnQueue.splice(index, 1);
+  }
 }
 
 function createScoreState() {
@@ -1020,7 +1117,7 @@ function removePrize(scene, world, prize) {
   world.removeRigidBody(prize.prizeBody);
 }
 
-function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState) {
+function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, respawnQueue) {
   for (let index = prizes.length - 1; index >= 0; index -= 1) {
     const prize = prizes[index];
     const position = prize.prizeBody.translation();
@@ -1030,6 +1127,7 @@ function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState) {
       createPointPopup(pointPopups);
       removePrize(scene, world, prize);
       prizes.splice(index, 1);
+      schedulePrizeRespawn(respawnQueue, prize.slot);
     }
   }
 }
@@ -1201,7 +1299,8 @@ async function init() {
   const ground = await loadGround(scene, world);
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
-  const prizes = await loadPrizes(scene, world);
+  const prizeTypes = await loadPrizeTypes();
+  const prizes = fillInitialPrizeSlots(scene, world, prizeTypes);
   const tent = await loadTent(scene, world);
   const trees = await loadTrees(scene);
   frameObjectInView(wall.wall, camera);
@@ -1215,6 +1314,7 @@ async function init() {
   const bullets = [];
   const pointPopups = [];
   const scoreState = createScoreState();
+  const prizeRespawnQueue = createPrizeRespawnQueue();
   status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
@@ -1243,7 +1343,8 @@ async function init() {
     applyGunAim(gun, ring.aimDirection);
     tickShootCooldown(shootCooldown, delta);
     syncBulletMeshes(bullets);
-    checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState);
+    checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, prizeRespawnQueue);
+    updatePrizeRespawns(scene, world, prizes, prizeTypes, prizeRespawnQueue, delta);
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
     updatePointPopups(pointPopups);
@@ -1267,7 +1368,10 @@ async function init() {
     wall,
     shelf,
     prizes,
-    prizeConfigs,
+    prizeTypes,
+    prizeTypeConfigs,
+    prizeSlotConfigs,
+    prizeRespawnQueue,
     tent,
     trees,
     treeConfigs,
