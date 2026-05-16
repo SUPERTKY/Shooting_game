@@ -132,6 +132,7 @@ const prizeSlotConfigs = [
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const prizeDropScoreHeight = 0.3;
+const prizeDropAabbMargin = 0.04;
 const pointPopupLifetime = 0.85;
 const pointPopupSize = 'min(28vmin, 190px)';
 const pointPopupScreenPadding = 96;
@@ -196,6 +197,7 @@ const isLikelyMobileDevice = window.matchMedia('(pointer: coarse)').matches
   || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const reusableWorldPosition = new THREE.Vector3();
 const reusableWorldRotation = new THREE.Quaternion();
+const reusablePrizeBounds = new THREE.Box3();
 THREE.Cache.enabled = true;
 
 function createCollisionGroup(memberships, filters) {
@@ -1219,17 +1221,37 @@ function removePointPopup(pointPopups, pointPopup) {
   }
 }
 
+function getPrizeDropY(prize) {
+  prize.prize.updateWorldMatrix(true, true);
+  reusablePrizeBounds.setFromObject(prize.prize);
+
+  if (!reusablePrizeBounds.isEmpty()) {
+    return reusablePrizeBounds.min.y;
+  }
+
+  const position = prize.prizeBody.translation();
+
+  return position.y;
+}
+
 function removePrize(scene, world, prize) {
+  if (prize.removed) {
+    return;
+  }
+
+  prize.removed = true;
   scene.remove(prize.prize);
+  prize.prizeColliders.forEach((collider) => world.removeCollider(collider, true));
+  prize.prizeColliders.length = 0;
   world.removeRigidBody(prize.prizeBody);
 }
 
 function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, respawnQueue) {
   for (let index = prizes.length - 1; index >= 0; index -= 1) {
     const prize = prizes[index];
-    const position = prize.prizeBody.translation();
+    const dropY = getPrizeDropY(prize);
 
-    if (position.y <= prizeDropScoreHeight) {
+    if (dropY <= prizeDropScoreHeight + prizeDropAabbMargin) {
       scoreState.points += 1;
       createPointPopup(pointPopups);
       removePrize(scene, world, prize);
@@ -1477,9 +1499,9 @@ async function init() {
     applyGunAim(gun, ring.aimDirection);
     tickShootCooldown(shootCooldown, delta);
     syncBulletMeshes(bullets);
+    syncPrizeMeshes(prizes);
     checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, prizeRespawnQueue);
     updatePrizeRespawns(scene, world, prizes, prizeTypes, prizeRespawnQueue, delta);
-    syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
     updatePointPopups(pointPopups);
     renderer.render(scene, camera);
