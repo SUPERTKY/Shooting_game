@@ -944,18 +944,29 @@ function isShootCoolingDown(cooldown) {
   return cooldown.remaining > 0;
 }
 
-function updateCooldownGauge(cooldown) {
+function updateCooldownGauge(cooldown, { animate = true } = {}) {
   const progress = 1 - (cooldown.remaining / cooldown.duration);
   const clampedProgress = THREE.MathUtils.clamp(progress, 0, 1);
 
+  if (!animate) {
+    cooldownGaugeFill.style.transition = 'none';
+  }
+
   cooldownGaugeFill.style.transform = `scaleX(${clampedProgress})`;
+
+  if (!animate) {
+    // クールダウン開始時だけは、満タンから0へ戻る動きを見せずに即0へ切り替える。
+    void cooldownGaugeFill.offsetWidth;
+    cooldownGaugeFill.style.transition = '';
+  }
+
   shootButton.disabled = isShootCoolingDown(cooldown);
   shootButton.setAttribute('aria-disabled', String(shootButton.disabled));
 }
 
 function startShootCooldown(cooldown) {
   cooldown.remaining = cooldown.duration;
-  updateCooldownGauge(cooldown);
+  updateCooldownGauge(cooldown, { animate: false });
 }
 
 function tickShootCooldown(cooldown, delta) {
