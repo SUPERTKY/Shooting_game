@@ -115,9 +115,9 @@ const prizeSizeByTypeId = {
   10: 0.15,
 };
 const prizeHeightScaleByTypeId = {
-  4: 1,
-  5: 1,
-  8: 1,
+  4: -0.3,
+  5: 0.3,
+  8: 0.3,
 };
 const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
   const id = index + 1;
