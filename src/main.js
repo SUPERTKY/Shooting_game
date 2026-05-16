@@ -17,6 +17,10 @@ const tablePath = './assets/Table.glb';
 const groundPath = './assets/Ground.glb';
 const shelfPath = './assets/shelf.glb';
 const tentPath = './assets/Tent.glb';
+const treePaths = {
+  tree1: './tree/tree_1.glb',
+  tree2: './tree/tree_2.glb',
+};
 const maxPrizeCount = 10;
 const createPrizeConfig = (id, position, rotation = new THREE.Euler(0, 0, 0), size = 0.15) => ({
   id,
@@ -40,6 +44,39 @@ const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
 const groundViewMaxSize = 16;
 const groundPosition = new THREE.Vector3(0, 0, 0);
+const treeViewMaxSize = 2.4;
+const createTreeConfig = (id, path, position, rotationY = 0) => ({
+  id,
+  path,
+  position,
+  rotation: new THREE.Euler(0, rotationY, 0),
+});
+const treeConfigs = [
+  createTreeConfig(
+    'tree-1-left',
+    treePaths.tree1,
+    new THREE.Vector3(-3.2, 0, -1.4),
+    Math.PI * 0.12,
+  ),
+  createTreeConfig(
+    'tree-1-back-left',
+    treePaths.tree1,
+    new THREE.Vector3(-2.35, 0, -4.2),
+    -Math.PI * 0.18,
+  ),
+  createTreeConfig(
+    'tree-2-right',
+    treePaths.tree2,
+    new THREE.Vector3(3.2, 0, -1.4),
+    -Math.PI * 0.14,
+  ),
+  createTreeConfig(
+    'tree-2-back-right',
+    treePaths.tree2,
+    new THREE.Vector3(2.35, 0, -4.2),
+    Math.PI * 0.2,
+  ),
+];
 const skyTexturePath = './image/sky.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
@@ -270,6 +307,50 @@ async function loadTable(camera) {
   keepCameraChildLevelWithWorld(table, camera, tableViewQuaternion);
 
   return { table, tableModel };
+}
+
+async function loadTree(scene, config, loader) {
+  const gltf = await loader.loadAsync(config.path);
+  const treeModel = gltf.scene;
+  const tree = new THREE.Group();
+  tree.name = `decorative-${config.id}`;
+
+  treeModel.updateWorldMatrix(true, true);
+  const treeBox = new THREE.Box3().setFromObject(treeModel);
+  const treeCenter = treeBox.getCenter(new THREE.Vector3());
+  const treeSize = treeBox.getSize(new THREE.Vector3());
+  const treeMaxSize = Math.max(treeSize.x, treeSize.y, treeSize.z);
+  const treeScale = treeMaxSize > 0 ? treeViewMaxSize / treeMaxSize : 1;
+
+  treeModel.position.set(
+    -treeCenter.x * treeScale,
+    -treeBox.min.y * treeScale,
+    -treeCenter.z * treeScale,
+  );
+  treeModel.scale.setScalar(treeScale);
+  tree.add(treeModel);
+  tree.position.copy(config.position);
+  tree.rotation.copy(config.rotation);
+
+  tree.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+
+  scene.add(tree);
+
+  return { config, tree, treeModel, treeScale };
+}
+
+async function loadTrees(scene) {
+  const loader = new GLTFLoader();
+  const loadedTrees = await Promise.all(
+    treeConfigs.map((config) => loadTree(scene, config, loader)),
+  );
+
+  return loadedTrees;
 }
 
 async function loadTent(scene, world) {
@@ -995,13 +1076,14 @@ async function init() {
   const background = await configureBackground(scene);
   const lights = addLights(scene);
 
-  status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
+  status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
   const ring = setupRingUi();
   const ground = await loadGround(scene, world);
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
   const prizes = await loadPrizes(scene, world);
   const tent = await loadTent(scene, world);
+  const trees = await loadTrees(scene);
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
   const gun = await loadGun(camera);
@@ -1010,7 +1092,7 @@ async function init() {
   const shootCooldown = createShootCooldown();
   updateCooldownGauge(shootCooldown);
   const bullets = [];
-  status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個読み込みました。`;
+  status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1062,6 +1144,8 @@ async function init() {
     prizes,
     prizeConfigs,
     tent,
+    trees,
+    treeConfigs,
     table,
     gun,
     bulletTemplate,
@@ -1075,5 +1159,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '背景画像、地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '背景画像、地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
 });
