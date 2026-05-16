@@ -132,6 +132,9 @@ const prizeSlotConfigs = [
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const prizeDropScoreHeight = 0.3;
+const maxRendererPixelRatio = 1.5;
+const shadowMapSize = 1024;
+const shadowUpdateInterval = 2;
 const pointPopupLifetime = 0.85;
 const pointPopupSize = 'min(28vmin, 190px)';
 const pointPopupScreenPadding = 96;
@@ -149,12 +152,12 @@ const gunAimLimits = {
 const gunViewMaxSize = 0.65;
 const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
 const bulletSpeed = 20;
-const bulletLifetime = 8;
-const maxActiveBullets = 30;
+const bulletLifetime = 6;
+const maxActiveBullets = 20;
 const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
-const bulletTrailPointCount = 18;
+const bulletTrailPointCount = 12;
 const bulletTrailSpacing = 0.045;
 const bulletTrailColor = 0xffffff;
 const bulletTrailOpacity = 0.72;
@@ -184,18 +187,28 @@ const tentCollisionGroup = createCollisionGroup(
   collisionGroups.bullet,
 );
 const clock = new THREE.Clock();
+const prizeBottomMatrix = new THREE.Matrix4();
+const prizeBottomPosition = new THREE.Vector3();
+const prizeBottomQuaternion = new THREE.Quaternion();
+const prizeBottomScale = new THREE.Vector3(1, 1, 1);
+const prizeBottomCorner = new THREE.Vector3();
 
 function createCollisionGroup(memberships, filters) {
   return (memberships << 16) | filters;
 }
 
 function createRenderer() {
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance',
+    stencil: false,
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxRendererPixelRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;
   canvasContainer.appendChild(renderer.domElement);
 
   return renderer;
@@ -239,7 +252,7 @@ function addLights(scene) {
   const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
   keyLight.position.set(4, 6, -4);
   keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(2048, 2048);
+  keyLight.shadow.mapSize.set(shadowMapSize, shadowMapSize);
   keyLight.shadow.camera.near = 0.5;
   keyLight.shadow.camera.far = 30;
   keyLight.shadow.camera.left = -8;
@@ -495,8 +508,8 @@ async function loadBulletTemplate() {
   bulletModel.scale.setScalar(bulletScale);
   bulletModel.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = false;
+      child.receiveShadow = false;
     }
   });
 
@@ -585,11 +598,16 @@ function updateTrailGeometry(trail, trailPositions, trailPositionBuffer) {
 }
 
 function updateBulletTrail(bullet) {
-  bullet.trail.positions.pop();
-  bullet.trail.positions.unshift(bullet.mesh.position.clone());
+  const positions = bullet.trail.positions;
+
+  for (let index = positions.length - 1; index > 0; index -= 1) {
+    positions[index].copy(positions[index - 1]);
+  }
+
+  positions[0].copy(bullet.mesh.position);
   updateTrailGeometry(
     bullet.trail.line,
-    bullet.trail.positions,
+    positions,
     bullet.trail.positionBuffer,
   );
 }
@@ -896,6 +914,43 @@ function applyPrizeSlotSizeScale(prizeModel, sizeScale) {
   prizeModel.scale.multiplyScalar(uniformSizeScale);
 }
 
+
+function getBoxCorners(box) {
+  return [
+    new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+    new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+    new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+    new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+    new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+    new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+    new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+    new THREE.Vector3(box.max.x, box.max.y, box.max.z),
+  ];
+}
+
+function createLocalBoundingCorners(object) {
+  object.updateWorldMatrix(true, true);
+
+  const worldBox = new THREE.Box3().setFromObject(object);
+  const inverseWorldMatrix = new THREE.Matrix4().copy(object.matrixWorld).invert();
+
+  return getBoxCorners(worldBox).map((corner) => corner.applyMatrix4(inverseWorldMatrix));
+}
+
+function getPrizeBottomY(prize) {
+  const position = prize.prizeBody.translation();
+  const rotation = prize.prizeBody.rotation();
+  prizeBottomPosition.set(position.x, position.y, position.z);
+  prizeBottomQuaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+  prizeBottomMatrix.compose(prizeBottomPosition, prizeBottomQuaternion, prizeBottomScale);
+
+  return prize.localBoundingCorners.reduce((lowestY, corner) => {
+    prizeBottomCorner.copy(corner).applyMatrix4(prizeBottomMatrix);
+
+    return Math.min(lowestY, prizeBottomCorner.y);
+  }, Infinity);
+}
+
 async function loadPrizeType(config, loader) {
   let gltf;
 
@@ -990,6 +1045,8 @@ function createPrize(scene, world, prizeType, slot) {
     }
   });
 
+  const localBoundingCorners = createLocalBoundingCorners(prize);
+
   return {
     config: prizeType.config,
     slot,
@@ -997,6 +1054,7 @@ function createPrize(scene, world, prizeType, slot) {
     prizeModel,
     prizeBody,
     prizeColliders,
+    localBoundingCorners,
   };
 }
 
@@ -1163,9 +1221,9 @@ function removePrize(scene, world, prize) {
 function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, respawnQueue) {
   for (let index = prizes.length - 1; index >= 0; index -= 1) {
     const prize = prizes[index];
-    const position = prize.prizeBody.translation();
+    const prizeBottomY = getPrizeBottomY(prize);
 
-    if (position.y <= prizeDropScoreHeight) {
+    if (prizeBottomY <= prizeDropScoreHeight) {
       scoreState.points += 1;
       createPointPopup(pointPopups);
       removePrize(scene, world, prize);
@@ -1363,7 +1421,9 @@ async function init() {
   function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxRendererPixelRatio));
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.needsUpdate = true;
   }
 
   window.addEventListener('resize', onResize);
@@ -1379,6 +1439,8 @@ async function init() {
     startShootCooldown(shootCooldown);
   });
 
+  let frameCount = 0;
+
   function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
     world.timestep = delta;
@@ -1391,6 +1453,8 @@ async function init() {
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
     updatePointPopups(pointPopups);
+    frameCount += 1;
+    renderer.shadowMap.needsUpdate = frameCount % shadowUpdateInterval === 0;
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
