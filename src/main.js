@@ -118,16 +118,16 @@ const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
 // sizeScale は配置スロットごとの倍率です。
 // 同じ景品タイプでも置き場所ごとに大きさを変えたい場合に指定します。
 const prizeSlotConfigs = [
-  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.4, -1.65), { sizeScale: 1 }),
-  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.4, -1.65), { sizeScale: 1 }),
-  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.4, -1.65), { sizeScale: 1 }),
-  createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.6, -2), { sizeScale: 1 }),
-  createPrizeSlotConfig(5, new THREE.Vector3(0, 0.6, -2), { sizeScale: 1 }),
-  createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.6, -2), { sizeScale: 1 }),
-  createPrizeSlotConfig(7, new THREE.Vector3(-0.25, 0.8, -2.35), { sizeScale: 1 }),
-  createPrizeSlotConfig(8, new THREE.Vector3(0, 0.8, -2.35), { sizeScale: 1 }),
-  createPrizeSlotConfig(9, new THREE.Vector3(0.25, 0.8, -2.35), { sizeScale: 1 }),
-  createPrizeSlotConfig(10, new THREE.Vector3(0.5, 0.8, -2.35), { sizeScale: 1 }),
+  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.4, -1.45), { sizeScale: 1 }),
+  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.4, -1.45), { sizeScale: 1 }),
+  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.4, -1.45), { sizeScale: 1 }),
+  createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.5, -1.9), { sizeScale: 1 }),
+  createPrizeSlotConfig(5, new THREE.Vector3(0, 0.5, -1.9), { sizeScale: 1 }),
+  createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.5, -1.9), { sizeScale: 1 }),
+  createPrizeSlotConfig(7, new THREE.Vector3(-0.25, 0.7, -2.25), { sizeScale: 1 }),
+  createPrizeSlotConfig(8, new THREE.Vector3(0, 0.7, -2.25), { sizeScale: 1 }),
+  createPrizeSlotConfig(9, new THREE.Vector3(0.25, 0.7, -2.25), { sizeScale: 1 }),
+  createPrizeSlotConfig(10, new THREE.Vector3(0.5, 0.7, -2.25), { sizeScale: 1 }),
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
@@ -137,7 +137,7 @@ const pointPopupSize = 'min(28vmin, 190px)';
 const pointPopupScreenPadding = 96;
 const pointPopupMinRotation = -90;
 const pointPopupMaxRotation = 90;
-const shelfWallGap = 0.08;
+const shelfWallGap = 0.28;
 const shelfScale = 0.85;
 const shelfRotationY = -Math.PI / 2;
 const shelfHeightOffset = 0.3;
