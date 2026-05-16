@@ -8,6 +8,7 @@ const ringUi = document.querySelector('#target-ring-ui');
 const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const shootButton = document.querySelector('#shoot-button');
+const cooldownGaugeFill = document.querySelector('#cooldown-gauge-fill');
 const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
@@ -28,7 +29,8 @@ const wallRotationY = Math.PI / 2;
 const ringTraceAreaScale = 0.8;
 const cameraViewHeightRatio = 0.44;
 const cameraBackDistanceMultiplier = 2.1;
-const gunViewPosition = new THREE.Vector3(0, -0.12, -0.55);
+const cameraHorizontalOffset = -0.22;
+const gunViewPosition = new THREE.Vector3(0.18, -0.12, -0.55);
 const tableViewPosition = new THREE.Vector3(0, -0.4, -0.5);
 const tableViewRotation = new THREE.Euler(0, 0, 0);
 const tableViewQuaternion = new THREE.Quaternion().setFromEuler(tableViewRotation);
@@ -77,6 +79,7 @@ const bulletTrailPointCount = 18;
 const bulletTrailSpacing = 0.045;
 const bulletTrailColor = 0xffffff;
 const bulletTrailOpacity = 0.72;
+const shootCooldownDuration = 1;
 const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
 const collisionGroups = {
   environment: 0x0001,
@@ -212,8 +215,10 @@ function frameObjectInView(object, camera) {
 
   const viewHeight = center.y + size.y * cameraViewHeightRatio;
 
-  camera.position.set(center.x, viewHeight, center.z + distance * cameraBackDistanceMultiplier);
-  camera.lookAt(center.x, viewHeight, center.z);
+  const cameraX = center.x + cameraHorizontalOffset;
+
+  camera.position.set(cameraX, viewHeight, center.z + distance * cameraBackDistanceMultiplier);
+  camera.lookAt(cameraX, viewHeight, center.z);
   camera.updateProjectionMatrix();
 }
 
@@ -858,20 +863,25 @@ function setupRingUi() {
   window.addEventListener('resize', syncWhenReady);
 
   const aimDirection = new THREE.Vector2(0, 0);
+  const dragStartAim = new THREE.Vector2(0, 0);
+  const dragStartPointer = new THREE.Vector2(0, 0);
   const tracedPoints = [];
+  const clampAimDirection = (aim) => {
+    aim.x = THREE.MathUtils.clamp(aim.x, -1, 1);
+    aim.y = THREE.MathUtils.clamp(aim.y, -1, 1);
+  };
   const updateTracePoint = (event) => {
     const areaRect = ringTraceArea.getBoundingClientRect();
-    const centerX = areaRect.width / 2;
-    const centerY = areaRect.height / 2;
     const localX = event.clientX - areaRect.left;
     const localY = event.clientY - areaRect.top;
     const radius = Math.max(Math.min(areaRect.width, areaRect.height) / 2, 1);
-    const nextAim = new THREE.Vector2((localX - centerX) / radius, (localY - centerY) / radius);
+    const pointerDelta = new THREE.Vector2(
+      (localX - dragStartPointer.x) / radius,
+      (localY - dragStartPointer.y) / radius,
+    );
+    const nextAim = dragStartAim.clone().add(pointerDelta);
 
-    if (nextAim.length() > 1) {
-      nextAim.normalize();
-    }
-
+    clampAimDirection(nextAim);
     aimDirection.copy(nextAim);
     tracedPoints.push({
       x: localX,
@@ -887,9 +897,12 @@ function setupRingUi() {
   };
 
   ringTraceArea.addEventListener('pointerdown', (event) => {
+    const areaRect = ringTraceArea.getBoundingClientRect();
+
     tracedPoints.length = 0;
+    dragStartAim.copy(aimDirection);
+    dragStartPointer.set(event.clientX - areaRect.left, event.clientY - areaRect.top);
     ringTraceArea.setPointerCapture(event.pointerId);
-    updateTracePoint(event);
   });
 
   ringTraceArea.addEventListener('pointermove', (event) => {
@@ -923,6 +936,52 @@ function applyGunAim(gun, aimDirection) {
   );
 }
 
+function createShootCooldown() {
+  return {
+    duration: shootCooldownDuration,
+    remaining: 0,
+  };
+}
+
+function isShootCoolingDown(cooldown) {
+  return cooldown.remaining > 0;
+}
+
+function updateCooldownGauge(cooldown, { animate = true } = {}) {
+  const progress = 1 - (cooldown.remaining / cooldown.duration);
+  const clampedProgress = THREE.MathUtils.clamp(progress, 0, 1);
+
+  if (!animate) {
+    cooldownGaugeFill.style.transition = 'none';
+  }
+
+  cooldownGaugeFill.style.transform = `scaleX(${clampedProgress})`;
+
+  if (!animate) {
+    // クールダウン開始時だけは、満タンから0へ戻る動きを見せずに即0へ切り替える。
+    void cooldownGaugeFill.offsetWidth;
+    cooldownGaugeFill.style.transition = '';
+  }
+
+  shootButton.disabled = isShootCoolingDown(cooldown);
+  shootButton.setAttribute('aria-disabled', String(shootButton.disabled));
+}
+
+function startShootCooldown(cooldown) {
+  cooldown.remaining = cooldown.duration;
+  updateCooldownGauge(cooldown, { animate: false });
+}
+
+function tickShootCooldown(cooldown, delta) {
+  if (!isShootCoolingDown(cooldown)) {
+    updateCooldownGauge(cooldown);
+    return;
+  }
+
+  cooldown.remaining = Math.max(cooldown.remaining - delta, 0);
+  updateCooldownGauge(cooldown);
+}
+
 async function init() {
   await RAPIER.init({});
 
@@ -948,6 +1007,8 @@ async function init() {
   const gun = await loadGun(camera);
   const bulletTemplate = await loadBulletTemplate();
   const gunshotSound = createGunshotSound();
+  const shootCooldown = createShootCooldown();
+  updateCooldownGauge(shootCooldown);
   const bullets = [];
   status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個読み込みました。`;
 
@@ -960,9 +1021,14 @@ async function init() {
   window.addEventListener('resize', onResize);
 
   shootButton.addEventListener('click', () => {
+    if (isShootCoolingDown(shootCooldown)) {
+      return;
+    }
+
     applyGunAim(gun, ring.aimDirection);
     playGunshotSound(gunshotSound);
     bullets.push(createBullet(scene, world, bulletTemplate, gun));
+    startShootCooldown(shootCooldown);
   });
 
   function animate() {
@@ -970,6 +1036,7 @@ async function init() {
     world.timestep = delta;
     world.step();
     applyGunAim(gun, ring.aimDirection);
+    tickShootCooldown(shootCooldown, delta);
     syncBulletMeshes(bullets);
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
@@ -999,6 +1066,7 @@ async function init() {
     gun,
     bulletTemplate,
     gunshotSound,
+    shootCooldown,
     bullets,
     ring,
     aimLimits: gunAimLimits,
