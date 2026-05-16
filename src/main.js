@@ -102,6 +102,7 @@ const pointImagePath = './image/Point.png';
 // prizeSizeByTypeId に景品タイプごとの見た目サイズを設定できます。
 // 数値はモデルの最大辺をそろえるサイズ、THREE.Vector3 は幅・高さ・奥行きを個別指定するサイズです。
 // Prize_4 / Prize_5 / Prize_7 / Prize_8 の高さだけを変えたい場合は prizeHeightScaleByTypeId の倍率を変更します。
+// 負の数を指定した場合は高さを変更せず、その数値分だけ下方向へ移動します。
 const prizeSizeByTypeId = {
   1: 0.15,
   2: 0.3,
@@ -117,7 +118,7 @@ const prizeSizeByTypeId = {
 const prizeHeightScaleByTypeId = {
   4: -0.3,
   5: 0.3,
-  7:0.3,
+  7: 0.3,
   8: -0.3,
 };
 const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
@@ -983,14 +984,16 @@ async function loadPrizeType(config, loader) {
   const prizeSize = prizeBox.getSize(new THREE.Vector3());
   const prizeMaxSize = Math.max(prizeSize.x, prizeSize.y, prizeSize.z);
   const prizeScale = getPrizeScale(config.size, prizeMaxSize);
-  const heightScale = Number.isFinite(config.heightScale)
+  const heightScaleConfig = Number.isFinite(config.heightScale)
     ? config.heightScale
     : defaultPrizeHeightScale;
+  const heightScale = heightScaleConfig >= 0 ? heightScaleConfig : defaultPrizeHeightScale;
+  const heightOffset = heightScaleConfig < 0 ? heightScaleConfig : 0;
   prizeScale.y *= heightScale;
 
   prizeModel.position.set(
     -prizeCenter.x * prizeScale.x,
-    -prizeBox.min.y * prizeScale.y,
+    -prizeBox.min.y * prizeScale.y + heightOffset,
     -prizeCenter.z * prizeScale.z,
   );
   prizeModel.rotation.copy(config.rotation);
