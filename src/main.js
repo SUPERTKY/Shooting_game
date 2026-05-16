@@ -115,10 +115,9 @@ const prizeSizeByTypeId = {
   10: 0.15,
 };
 const prizeHeightScaleByTypeId = {
-  4: 1,
-  5: 1,
-  7: 1,
-  8: 1,
+  4: -0.3,
+  5: 0.3,
+  8: 0.3,
 };
 const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
   const id = index + 1;
@@ -138,9 +137,9 @@ const prizeSlotConfigs = [
   createPrizeSlotConfig(5, new THREE.Vector3(0, 0.53, -1.8), { sizeScale: 1 }),
   createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.53, -1.8), { sizeScale: 1 }),
   createPrizeSlotConfig(7, new THREE.Vector3(-0.7, 0.73, -2.15), { sizeScale: 1 }),
-  createPrizeSlotConfig(8, new THREE.Vector3(-0.3, 0.73, -2.15), { sizeScale: 1 }),
-  createPrizeSlotConfig(9, new THREE.Vector3(0.3, 0.73, -2.15), { sizeScale: 1 }),
-  createPrizeSlotConfig(10, new THREE.Vector3(0.7, 0.73, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(8, new THREE.Vector3(-0.3, 0.7, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(9, new THREE.Vector3(0.3, 0.7, -2.15), { sizeScale: 1 }),
+  createPrizeSlotConfig(10, new THREE.Vector3(0.7, 0.7, -2.15), { sizeScale: 1 }),
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
