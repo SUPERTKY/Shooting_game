@@ -78,6 +78,7 @@ const treeConfigs = [
   ),
 ];
 const skyTexturePath = './image/sky.png';
+const pointImagePath = './image/Point.png';
 // 景品は Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加のファイルは読み込み時にスキップされます。
 // 各行の position / rotation / size を変更すると、景品ごとに位置・回転・サイズを調整できます。
@@ -95,6 +96,11 @@ const prizeConfigs = [
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
+const prizeDropScoreHeight = 0.12;
+const pointPopupLifetime = 1.2;
+const pointPopupScale = 0.35;
+const pointPopupMinRotation = THREE.MathUtils.degToRad(-90);
+const pointPopupMaxRotation = THREE.MathUtils.degToRad(90);
 const shelfWallGap = 0.08;
 const shelfScale = 0.85;
 const shelfRotationY = -Math.PI / 2;
@@ -914,6 +920,75 @@ async function loadPrizes(scene, world) {
   return loadedPrizes.filter(Boolean);
 }
 
+async function loadPointTexture() {
+  const texture = await new THREE.TextureLoader().loadAsync(pointImagePath);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  return texture;
+}
+
+function createPointPopup(scene, pointTexture, position) {
+  const material = new THREE.SpriteMaterial({
+    map: pointTexture,
+    transparent: true,
+    depthWrite: false,
+  });
+  material.rotation = THREE.MathUtils.randFloat(
+    pointPopupMinRotation,
+    pointPopupMaxRotation,
+  );
+
+  const popup = new THREE.Sprite(material);
+  popup.name = 'point-popup';
+  popup.position.copy(position);
+  popup.scale.setScalar(pointPopupScale);
+  popup.renderOrder = 2;
+  scene.add(popup);
+
+  return { sprite: popup, age: 0, lifetime: pointPopupLifetime };
+}
+
+function removePrize(scene, world, prize) {
+  scene.remove(prize.prize);
+  world.removeRigidBody(prize.prizeBody);
+}
+
+function checkDroppedPrizes(scene, world, prizes, pointPopups, pointTexture) {
+  for (let index = prizes.length - 1; index >= 0; index -= 1) {
+    const prize = prizes[index];
+    const position = prize.prizeBody.translation();
+
+    if (position.y <= prizeDropScoreHeight) {
+      pointPopups.push(
+        createPointPopup(
+          scene,
+          pointTexture,
+          new THREE.Vector3(position.x, position.y, position.z),
+        ),
+      );
+      removePrize(scene, world, prize);
+      prizes.splice(index, 1);
+    }
+  }
+}
+
+function updatePointPopups(scene, pointPopups, delta) {
+  for (let index = pointPopups.length - 1; index >= 0; index -= 1) {
+    const popup = pointPopups[index];
+    popup.age += delta;
+
+    const remainingRatio = THREE.MathUtils.clamp(1 - (popup.age / popup.lifetime), 0, 1);
+    popup.sprite.material.opacity = remainingRatio;
+    popup.sprite.position.y += delta * 0.08;
+
+    if (popup.age >= popup.lifetime) {
+      scene.remove(popup.sprite);
+      popup.sprite.material.dispose();
+      pointPopups.splice(index, 1);
+    }
+  }
+}
+
 function syncPrizeMeshes(prizes) {
   prizes.forEach((prize) => {
     const position = prize.prizeBody.translation();
@@ -1076,7 +1151,7 @@ async function init() {
   const background = await configureBackground(scene);
   const lights = addLights(scene);
 
-  status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、UIリングを読み込み中...';
+  status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、ポイント画像、UIリングを読み込み中...';
   const ring = setupRingUi();
   const ground = await loadGround(scene, world);
   const wall = await loadWall(scene, world);
@@ -1088,10 +1163,12 @@ async function init() {
   const table = await loadTable(camera);
   const gun = await loadGun(camera);
   const bulletTemplate = await loadBulletTemplate();
+  const pointTexture = await loadPointTexture();
   const gunshotSound = createGunshotSound();
   const shootCooldown = createShootCooldown();
   updateCooldownGauge(shootCooldown);
   const bullets = [];
+  const pointPopups = [];
   status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
@@ -1120,8 +1197,10 @@ async function init() {
     applyGunAim(gun, ring.aimDirection);
     tickShootCooldown(shootCooldown, delta);
     syncBulletMeshes(bullets);
+    checkDroppedPrizes(scene, world, prizes, pointPopups, pointTexture);
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
+    updatePointPopups(scene, pointPopups, delta);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
@@ -1149,6 +1228,8 @@ async function init() {
     table,
     gun,
     bulletTemplate,
+    pointTexture,
+    pointPopups,
     gunshotSound,
     shootCooldown,
     bullets,
@@ -1159,5 +1240,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '背景画像、地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、UIリング、またはライブラリの読み込みに失敗しました。';
+  status.textContent = '背景画像、地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、ポイント画像、UIリング、またはライブラリの読み込みに失敗しました。';
 });
