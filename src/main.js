@@ -97,10 +97,11 @@ const prizeConfigs = [
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const prizeDropScoreHeight = 0.12;
-const pointPopupLifetime = 1.2;
-const pointPopupScale = 0.35;
-const pointPopupMinRotation = THREE.MathUtils.degToRad(-90);
-const pointPopupMaxRotation = THREE.MathUtils.degToRad(90);
+const pointPopupLifetime = 0.85;
+const pointPopupSize = 'min(28vmin, 190px)';
+const pointPopupScreenPadding = 96;
+const pointPopupMinRotation = -90;
+const pointPopupMaxRotation = 90;
 const shelfWallGap = 0.08;
 const shelfScale = 0.85;
 const shelfRotationY = -Math.PI / 2;
@@ -920,32 +921,80 @@ async function loadPrizes(scene, world) {
   return loadedPrizes.filter(Boolean);
 }
 
-async function loadPointTexture() {
-  const texture = await new THREE.TextureLoader().loadAsync(pointImagePath);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  return texture;
+function createScoreState() {
+  return {
+    points: 0,
+  };
 }
 
-function createPointPopup(scene, pointTexture, position) {
-  const material = new THREE.SpriteMaterial({
-    map: pointTexture,
-    transparent: true,
-    depthWrite: false,
-  });
-  material.rotation = THREE.MathUtils.randFloat(
+function getRandomScreenPosition() {
+  const minX = Math.min(pointPopupScreenPadding, window.innerWidth / 2);
+  const minY = Math.min(pointPopupScreenPadding, window.innerHeight / 2);
+  const maxX = Math.max(window.innerWidth - minX, minX);
+  const maxY = Math.max(window.innerHeight - minY, minY);
+
+  return {
+    x: THREE.MathUtils.randFloat(minX, maxX),
+    y: THREE.MathUtils.randFloat(minY, maxY),
+  };
+}
+
+function createPointPopup(pointPopups) {
+  const popup = document.createElement('img');
+  const screenPosition = getRandomScreenPosition();
+  const rotation = THREE.MathUtils.randFloat(
     pointPopupMinRotation,
     pointPopupMaxRotation,
   );
 
-  const popup = new THREE.Sprite(material);
-  popup.name = 'point-popup';
-  popup.position.copy(position);
-  popup.scale.setScalar(pointPopupScale);
-  popup.renderOrder = 2;
-  scene.add(popup);
+  popup.src = pointImagePath;
+  popup.alt = '';
+  popup.draggable = false;
+  popup.className = 'point-popup';
+  Object.assign(popup.style, {
+    position: 'fixed',
+    left: `${screenPosition.x}px`,
+    top: `${screenPosition.y}px`,
+    zIndex: '4',
+    width: pointPopupSize,
+    height: 'auto',
+    pointerEvents: 'none',
+    userSelect: 'none',
+    transformOrigin: 'center',
+    willChange: 'transform, opacity',
+  });
 
-  return { sprite: popup, age: 0, lifetime: pointPopupLifetime };
+  document.body.appendChild(popup);
+
+  const baseTransform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+  const animation = popup.animate(
+    [
+      { opacity: 0, transform: `${baseTransform} scale(0.05)`, offset: 0 },
+      { opacity: 1, transform: `${baseTransform} scale(1)`, offset: 0.58 },
+      { opacity: 1, transform: `${baseTransform} scale(1.08)`, offset: 0.86 },
+      { opacity: 0, transform: `${baseTransform} scale(0.02)`, offset: 1 },
+    ],
+    {
+      duration: pointPopupLifetime * 1000,
+      easing: 'cubic-bezier(0.2, 0.9, 0.2, 1)',
+      fill: 'forwards',
+    },
+  );
+
+  const pointPopup = { element: popup, animation };
+  pointPopups.push(pointPopup);
+  animation.finished
+    .catch(() => {})
+    .finally(() => removePointPopup(pointPopups, pointPopup));
+}
+
+function removePointPopup(pointPopups, pointPopup) {
+  pointPopup.element.remove();
+  const index = pointPopups.indexOf(pointPopup);
+
+  if (index !== -1) {
+    pointPopups.splice(index, 1);
+  }
 }
 
 function removePrize(scene, world, prize) {
@@ -953,38 +1002,16 @@ function removePrize(scene, world, prize) {
   world.removeRigidBody(prize.prizeBody);
 }
 
-function checkDroppedPrizes(scene, world, prizes, pointPopups, pointTexture) {
+function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState) {
   for (let index = prizes.length - 1; index >= 0; index -= 1) {
     const prize = prizes[index];
     const position = prize.prizeBody.translation();
 
     if (position.y <= prizeDropScoreHeight) {
-      pointPopups.push(
-        createPointPopup(
-          scene,
-          pointTexture,
-          new THREE.Vector3(position.x, position.y, position.z),
-        ),
-      );
+      scoreState.points += 1;
+      createPointPopup(pointPopups);
       removePrize(scene, world, prize);
       prizes.splice(index, 1);
-    }
-  }
-}
-
-function updatePointPopups(scene, pointPopups, delta) {
-  for (let index = pointPopups.length - 1; index >= 0; index -= 1) {
-    const popup = pointPopups[index];
-    popup.age += delta;
-
-    const remainingRatio = THREE.MathUtils.clamp(1 - (popup.age / popup.lifetime), 0, 1);
-    popup.sprite.material.opacity = remainingRatio;
-    popup.sprite.position.y += delta * 0.08;
-
-    if (popup.age >= popup.lifetime) {
-      scene.remove(popup.sprite);
-      popup.sprite.material.dispose();
-      pointPopups.splice(index, 1);
     }
   }
 }
@@ -1169,6 +1196,7 @@ async function init() {
   updateCooldownGauge(shootCooldown);
   const bullets = [];
   const pointPopups = [];
+  const scoreState = createScoreState();
   status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
@@ -1197,7 +1225,7 @@ async function init() {
     applyGunAim(gun, ring.aimDirection);
     tickShootCooldown(shootCooldown, delta);
     syncBulletMeshes(bullets);
-    checkDroppedPrizes(scene, world, prizes, pointPopups, pointTexture);
+    checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState);
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta);
     updatePointPopups(scene, pointPopups, delta);
@@ -1228,8 +1256,8 @@ async function init() {
     table,
     gun,
     bulletTemplate,
-    pointTexture,
     pointPopups,
+    scoreState,
     gunshotSound,
     shootCooldown,
     bullets,
