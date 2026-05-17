@@ -101,7 +101,7 @@ const pointImagePath = './image/Point.png';
 // 未追加・読み込み失敗のファイルはスキップし、読み込めたタイプだけをランダム配置に使います。
 // prizeSizeByTypeId に景品タイプごとの見た目サイズを設定できます。
 // 数値はモデルの最大辺をそろえるサイズ、THREE.Vector3 は幅・高さ・奥行きを個別指定するサイズです。
-// Prize_4 / Prize_5 / Prize_7 / Prize_8 の高さだけを変えたい場合は prizeHeightScaleByTypeId の倍率を変更します。
+// Prize_1 から Prize_10 までの高さだけを変えたい場合は prizeHeightScaleByTypeId の倍率を変更します。
 // 負の数を指定した場合は高さを変更せず、その数値分だけ下方向へ移動します。
 const prizeSizeByTypeId = {
   1: 0.15,
@@ -116,10 +116,16 @@ const prizeSizeByTypeId = {
   10: 0.15,
 };
 const prizeHeightScaleByTypeId = {
+  1: 1,
+  2: 1,
+  3: 1,
   4: -0.3,
   5: 0.3,
+  6: 1,
   7: 0.3,
   8: -0.3,
+  9: 1,
+  10: 1,
 };
 const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
   const id = index + 1;
