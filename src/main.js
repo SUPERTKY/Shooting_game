@@ -138,9 +138,9 @@ const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
 // sizeScale は配置スロットごとの倍率です。
 // 同じ景品タイプでも置き場所ごとに大きさを変えたい場合に指定します。
 const prizeSlotConfigs = [
-  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.43, -1.45), { sizeScale: 1 }),
-  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.43, -1.45), { sizeScale: 1 }),
-  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.43, -1.45), { sizeScale: 1 }),
+  createPrizeSlotConfig(1, new THREE.Vector3(-0.5, 0.43, -1.43), { sizeScale: 1 }),
+  createPrizeSlotConfig(2, new THREE.Vector3(0, 0.43, -1.43), { sizeScale: 1 }),
+  createPrizeSlotConfig(3, new THREE.Vector3(0.5, 0.43, -1.43), { sizeScale: 1 }),
   createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.53, -1.8), { sizeScale: 1 }),
   createPrizeSlotConfig(5, new THREE.Vector3(0, 0.53, -1.8), { sizeScale: 1 }),
   createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.53, -1.8), { sizeScale: 1 }),
