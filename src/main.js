@@ -24,18 +24,18 @@ const treePaths = {
 const maxPrizeCount = 10;
 const defaultPrizeSize = 0.15;
 const defaultPrizeSlotSizeScale = 1;
-const defaultPrizeHeightScale = 1;
+const defaultPrizeHeightOffset = 0;
 const prizeRespawnMinDelay = 7;
 const prizeRespawnMaxDelay = 12;
 const createPrizeTypeConfig = (id, {
   size = defaultPrizeSize,
-  heightScale = defaultPrizeHeightScale,
+  heightOffset = defaultPrizeHeightOffset,
   rotation = new THREE.Euler(0, 0, 0),
 } = {}) => ({
   id,
   path: `./Prize/Prize_${id}.glb`,
   size,
-  heightScale,
+  heightOffset,
   rotation,
 });
 const createPrizeSlotConfig = (id, position, {
@@ -101,8 +101,8 @@ const pointImagePath = './image/Point.png';
 // 未追加・読み込み失敗のファイルはスキップし、読み込めたタイプだけをランダム配置に使います。
 // prizeSizeByTypeId に景品タイプごとの見た目サイズを設定できます。
 // 数値はモデルの最大辺をそろえるサイズ、THREE.Vector3 は幅・高さ・奥行きを個別指定するサイズです。
-// Prize_1 から Prize_10 までの高さだけを変えたい場合は prizeHeightScaleByTypeId の倍率を変更します。
-// 負の数を指定した場合は高さを変更せず、その数値分だけ下方向へ移動します。
+// Prize_1 から Prize_10 までの表示位置の高さを変えたい場合は prizeHeightOffsetByTypeId の値を変更します。
+// 正の数を指定すると上方向へ、負の数を指定すると下方向へ移動します。
 const prizeSizeByTypeId = {
   1: 0.15,
   2: 0.3,
@@ -115,24 +115,24 @@ const prizeSizeByTypeId = {
   9: 0.15,
   10: 0.15,
 };
-const prizeHeightScaleByTypeId = {
-  1: 1,
-  2: 1,
-  3: 1,
+const prizeHeightOffsetByTypeId = {
+  1: 0,
+  2: 0,
+  3: 0,
   4: -0.3,
   5: 0.3,
-  6: 1,
+  6: 0,
   7: 0.3,
   8: -0.3,
-  9: 1,
-  10: 1,
+  9: 0,
+  10: 0,
 };
 const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
   const id = index + 1;
 
   return createPrizeTypeConfig(id, {
     size: prizeSizeByTypeId[id] ?? defaultPrizeSize,
-    heightScale: prizeHeightScaleByTypeId[id] ?? defaultPrizeHeightScale,
+    heightOffset: prizeHeightOffsetByTypeId[id] ?? defaultPrizeHeightOffset,
   });
 });
 // sizeScale は配置スロットごとの倍率です。
@@ -990,12 +990,9 @@ async function loadPrizeType(config, loader) {
   const prizeSize = prizeBox.getSize(new THREE.Vector3());
   const prizeMaxSize = Math.max(prizeSize.x, prizeSize.y, prizeSize.z);
   const prizeScale = getPrizeScale(config.size, prizeMaxSize);
-  const heightScaleConfig = Number.isFinite(config.heightScale)
-    ? config.heightScale
-    : defaultPrizeHeightScale;
-  const heightScale = heightScaleConfig >= 0 ? heightScaleConfig : defaultPrizeHeightScale;
-  const heightOffset = heightScaleConfig < 0 ? heightScaleConfig : 0;
-  prizeScale.y *= heightScale;
+  const heightOffset = Number.isFinite(config.heightOffset)
+    ? config.heightOffset
+    : defaultPrizeHeightOffset;
 
   prizeModel.position.set(
     -prizeCenter.x * prizeScale.x,
