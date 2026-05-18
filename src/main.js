@@ -151,6 +151,7 @@ const prizeSlotConfigs = [
 ].slice(0, maxPrizeCount);
 const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
+const prizeHitVelocityMultiplier = 0.16;
 const prizeDropScoreHeight = 0.3;
 const maxRendererPixelRatio = 1.5;
 const shadowMapSize = 1024;
@@ -637,7 +638,7 @@ function disposeBulletTrail(trail) {
   trail.line.material.dispose();
 }
 
-function createBullet(scene, world, bulletTemplate, gun) {
+function createBullet(scene, world, bulletTemplate, gun, bulletColliderHandleMap) {
   const { muzzlePosition, muzzleDirection } = getGunMuzzleWorldTransform(gun);
   const bullet = bulletTemplate.model.clone(true);
   const bulletRotation = new THREE.Quaternion().setFromUnitVectors(
@@ -681,14 +682,19 @@ function createBullet(scene, world, bulletTemplate, gun) {
     bulletBody,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+  collider.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
 
-  return {
+  const createdBullet = {
     mesh: bullet,
     body: bulletBody,
     collider,
     trail,
     age: 0,
   };
+
+  bulletColliderHandleMap.set(collider.handle, createdBullet);
+
+  return createdBullet;
 }
 
 function syncBulletMeshes(bullets) {
@@ -702,27 +708,28 @@ function syncBulletMeshes(bullets) {
   });
 }
 
-function removeBullet(scene, world, bullet) {
+function removeBullet(scene, world, bullet, bulletColliderHandleMap = null) {
+  bulletColliderHandleMap?.delete(bullet.collider.handle);
   scene.remove(bullet.mesh);
   scene.remove(bullet.trail.line);
   disposeBulletTrail(bullet.trail);
   world.removeRigidBody(bullet.body);
 }
 
-function pruneBullets(scene, world, bullets, delta) {
+function pruneBullets(scene, world, bullets, delta, bulletColliderHandleMap) {
   for (let index = bullets.length - 1; index >= 0; index -= 1) {
     const bullet = bullets[index];
     bullet.age += delta;
 
     if (bullet.age > bulletLifetime || bullet.mesh.position.y < -4) {
-      removeBullet(scene, world, bullet);
+      removeBullet(scene, world, bullet, bulletColliderHandleMap);
       bullets.splice(index, 1);
     }
   }
 
   while (bullets.length > maxActiveBullets) {
     const bullet = bullets.shift();
-    removeBullet(scene, world, bullet);
+    removeBullet(scene, world, bullet, bulletColliderHandleMap);
   }
 }
 
@@ -1029,7 +1036,7 @@ function getRandomArrayItem(items) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
-function createPrize(scene, world, prizeType, slot) {
+function createPrize(scene, world, prizeType, slot, prizeColliderHandleMap = null) {
   const prizeModel = prizeType.prizeModel.clone(true);
   applyPrizeSlotSizeScale(prizeModel, slot.sizeScale);
 
@@ -1044,7 +1051,7 @@ function createPrize(scene, world, prizeType, slot) {
 
   const prizeQuaternion = new THREE.Quaternion().setFromEuler(slot.rotation);
   const prizeBody = world.createRigidBody(
-    RAPIER.RigidBodyDesc.dynamic()
+    RAPIER.RigidBodyDesc.fixed()
       .setTranslation(slot.position.x, slot.position.y, slot.position.z)
       .setRotation({
         x: prizeQuaternion.x,
@@ -1063,6 +1070,7 @@ function createPrize(scene, world, prizeType, slot) {
       const collider = createMeshConvexHullCollider(world, prizeBody, child, prize);
 
       if (collider) {
+        collider.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
         prizeColliders.push(collider);
       }
     }
@@ -1070,7 +1078,7 @@ function createPrize(scene, world, prizeType, slot) {
 
   const localBoundingCorners = createLocalBoundingCorners(prize);
 
-  return {
+  const createdPrize = {
     config: prizeType.config,
     slot,
     prize,
@@ -1078,7 +1086,35 @@ function createPrize(scene, world, prizeType, slot) {
     prizeBody,
     prizeColliders,
     localBoundingCorners,
+    isDynamic: false,
   };
+
+  prizeColliders.forEach((collider) => {
+    prizeColliderHandleMap?.set(collider.handle, createdPrize);
+  });
+
+  return createdPrize;
+}
+
+function activatePrizePhysics(prize, bullet = null) {
+  if (!prize || prize.isDynamic) {
+    return;
+  }
+
+  prize.prizeBody.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+  prize.prizeBody.setLinearDamping(prizeLinearDamping);
+  prize.prizeBody.setAngularDamping(prizeAngularDamping);
+  prize.prizeBody.wakeUp();
+  prize.isDynamic = true;
+
+  if (bullet) {
+    const bulletVelocity = bullet.body.linvel();
+    prize.prizeBody.setLinvel({
+      x: bulletVelocity.x * prizeHitVelocityMultiplier,
+      y: bulletVelocity.y * prizeHitVelocityMultiplier,
+      z: bulletVelocity.z * prizeHitVelocityMultiplier,
+    }, true);
+  }
 }
 
 function hasSpawnedPrizeDisappeared(prize) {
@@ -1099,13 +1135,13 @@ function getEmptyPrizeSlots(prizes) {
   return prizeSlotConfigs.filter((slot) => !isPrizeSlotOccupied(prizes, slot));
 }
 
-function fillInitialPrizeSlots(scene, world, prizeTypes) {
+function fillInitialPrizeSlots(scene, world, prizeTypes, prizeColliderHandleMap) {
   if (prizeTypes.length === 0) {
     return [];
   }
 
   return prizeSlotConfigs.map((slot) => (
-    createPrize(scene, world, getRandomArrayItem(prizeTypes), slot)
+    createPrize(scene, world, getRandomArrayItem(prizeTypes), slot, prizeColliderHandleMap)
   ));
 }
 
@@ -1126,7 +1162,15 @@ function schedulePrizeRespawn(respawnQueue, slot) {
   });
 }
 
-function updatePrizeRespawns(scene, world, prizes, prizeTypes, respawnQueue, delta) {
+function updatePrizeRespawns(
+  scene,
+  world,
+  prizes,
+  prizeTypes,
+  respawnQueue,
+  delta,
+  prizeColliderHandleMap,
+) {
   if (prizeTypes.length === 0) {
     respawnQueue.length = 0;
     return;
@@ -1146,7 +1190,13 @@ function updatePrizeRespawns(scene, world, prizes, prizeTypes, respawnQueue, del
       continue;
     }
 
-    prizes.push(createPrize(scene, world, getRandomArrayItem(prizeTypes), slot));
+    prizes.push(createPrize(
+      scene,
+      world,
+      getRandomArrayItem(prizeTypes),
+      slot,
+      prizeColliderHandleMap,
+    ));
     respawnQueue.splice(index, 1);
   }
 }
@@ -1236,24 +1286,58 @@ function removePointPopup(pointPopups, pointPopup) {
   }
 }
 
-function removePrize(scene, world, prize) {
+function removePrize(scene, world, prize, prizeColliderHandleMap = null) {
+  prize.prizeColliders.forEach((collider) => {
+    prizeColliderHandleMap?.delete(collider.handle);
+  });
   scene.remove(prize.prize);
   world.removeRigidBody(prize.prizeBody);
 }
 
-function checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, respawnQueue) {
+function checkDroppedPrizes(
+  scene,
+  world,
+  prizes,
+  pointPopups,
+  scoreState,
+  respawnQueue,
+  prizeColliderHandleMap,
+) {
   for (let index = prizes.length - 1; index >= 0; index -= 1) {
     const prize = prizes[index];
     const prizeBottomY = getPrizeBottomY(prize);
 
+    if (!prize.isDynamic) {
+      continue;
+    }
+
     if (prizeBottomY <= prizeDropScoreHeight) {
       scoreState.points += 1;
       createPointPopup(pointPopups);
-      removePrize(scene, world, prize);
+      removePrize(scene, world, prize, prizeColliderHandleMap);
       prizes.splice(index, 1);
       schedulePrizeRespawn(respawnQueue, prize.slot);
     }
   }
+}
+
+function handleCollisionEvents(
+  eventQueue,
+  bulletColliderHandleMap,
+  prizeColliderHandleMap,
+) {
+  eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+    if (!started) {
+      return;
+    }
+
+    const prize = prizeColliderHandleMap.get(handle1) ?? prizeColliderHandleMap.get(handle2);
+    const bullet = bulletColliderHandleMap.get(handle1) ?? bulletColliderHandleMap.get(handle2);
+
+    if (prize && bullet) {
+      activatePrizePhysics(prize, bullet);
+    }
+  });
 }
 
 function syncPrizeMeshes(prizes) {
@@ -1412,6 +1496,7 @@ async function init() {
 
   const gravity = new RAPIER.Vector3(0, -9.81, 0);
   const world = new RAPIER.World(gravity);
+  const eventQueue = new RAPIER.EventQueue(true);
   const renderer = createRenderer();
   const camera = createCamera();
   scene.add(camera);
@@ -1424,7 +1509,9 @@ async function init() {
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
   const prizeTypes = await loadPrizeTypes();
-  const prizes = fillInitialPrizeSlots(scene, world, prizeTypes);
+  const bulletColliderHandleMap = new Map();
+  const prizeColliderHandleMap = new Map();
+  const prizes = fillInitialPrizeSlots(scene, world, prizeTypes, prizeColliderHandleMap);
   const tent = await loadTent(scene, world);
   const trees = await loadTrees(scene);
   frameObjectInView(wall.wall, camera);
@@ -1458,7 +1545,13 @@ async function init() {
 
     applyGunAim(gun, ring.aimDirection);
     playGunshotSound(gunshotSound);
-    bullets.push(createBullet(scene, world, bulletTemplate, gun));
+    bullets.push(createBullet(
+      scene,
+      world,
+      bulletTemplate,
+      gun,
+      bulletColliderHandleMap,
+    ));
     startShootCooldown(shootCooldown);
   });
 
@@ -1467,14 +1560,31 @@ async function init() {
   function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
     world.timestep = delta;
-    world.step();
+    world.step(eventQueue);
+    handleCollisionEvents(eventQueue, bulletColliderHandleMap, prizeColliderHandleMap);
     applyGunAim(gun, ring.aimDirection);
     tickShootCooldown(shootCooldown, delta);
     syncBulletMeshes(bullets);
-    checkDroppedPrizes(scene, world, prizes, pointPopups, scoreState, prizeRespawnQueue);
-    updatePrizeRespawns(scene, world, prizes, prizeTypes, prizeRespawnQueue, delta);
+    checkDroppedPrizes(
+      scene,
+      world,
+      prizes,
+      pointPopups,
+      scoreState,
+      prizeRespawnQueue,
+      prizeColliderHandleMap,
+    );
+    updatePrizeRespawns(
+      scene,
+      world,
+      prizes,
+      prizeTypes,
+      prizeRespawnQueue,
+      delta,
+      prizeColliderHandleMap,
+    );
     syncPrizeMeshes(prizes);
-    pruneBullets(scene, world, bullets, delta);
+    pruneBullets(scene, world, bullets, delta, bulletColliderHandleMap);
     updatePointPopups(pointPopups);
     frameCount += 1;
     renderer.shadowMap.needsUpdate = frameCount % shadowUpdateInterval === 0;
@@ -1490,6 +1600,7 @@ async function init() {
     RAPIER,
     scene,
     world,
+    eventQueue,
     renderer,
     camera,
     lights,
@@ -1515,6 +1626,8 @@ async function init() {
     gunshotSound,
     shootCooldown,
     bullets,
+    bulletColliderHandleMap,
+    prizeColliderHandleMap,
     ring,
     aimLimits: gunAimLimits,
   };
