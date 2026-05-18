@@ -123,7 +123,7 @@ const prizeHeightOffsetByTypeId = {
   5: 0.1,
   6: 0,
   7: 0.3,
-  8: 0.1,
+  8: 0.3,
   9: 0,
   10: 0,
 };
