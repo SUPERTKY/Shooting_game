@@ -123,7 +123,7 @@ const prizeHeightOffsetByTypeId = {
   5: 0.1,
   6: 0,
   7: 0.3,
-  8: 0.3,
+  8: 0.1,
   9: 0,
   10: 0,
 };
@@ -144,7 +144,7 @@ const prizeSlotConfigs = [
   createPrizeSlotConfig(4, new THREE.Vector3(-0.5, 0.53, -1.8), { sizeScale: 1 }),
   createPrizeSlotConfig(5, new THREE.Vector3(0, 0.53, -1.8), { sizeScale: 1 }),
   createPrizeSlotConfig(6, new THREE.Vector3(0.5, 0.53, -1.8), { sizeScale: 1 }),
-  createPrizeSlotConfig(7, new THREE.Vector3(-0.7, 0.73, -2.13), { sizeScale: 1 }),
+  createPrizeSlotConfig(7, new THREE.Vector3(-0.7, 0.7, -2.13), { sizeScale: 1 }),
   createPrizeSlotConfig(8, new THREE.Vector3(-0.3, 0.7, -2.13), { sizeScale: 1 }),
   createPrizeSlotConfig(9, new THREE.Vector3(0.3, 0.7, -2.13), { sizeScale: 1 }),
   createPrizeSlotConfig(10, new THREE.Vector3(0.7, 0.7, -2.13), { sizeScale: 1 }),
