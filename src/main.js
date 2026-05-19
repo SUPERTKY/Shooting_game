@@ -116,7 +116,7 @@ const prizeSizeByTypeId = {
   10: 0.15,
 };
 const prizeHeightOffsetByTypeId = {
-  1: 0,
+  1: -0.1,
   2: 0,
   3: 0,
   4: 0,
