@@ -125,7 +125,7 @@ const prizeHeightOffsetByTypeId = {
   7: -0.15,
   8: -0.1,
   9: -0.1,
-  10: -0.1,
+  10: -0.15,
 };
 const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
   const id = index + 1;
