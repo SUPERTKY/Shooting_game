@@ -1150,13 +1150,10 @@ function createPrizeRespawnQueue() {
 }
 
 function createPrizePool() {
-  return new Map();
+  return [];
 }
 
 function recyclePrize(scene, prizePool, prize) {
-  const pooledPrizes = prizePool.get(prize.config.id) ?? [];
-  prizePool.set(prize.config.id, pooledPrizes);
-
   prize.prizeBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
   prize.prizeBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
   prize.prizeBody.setBodyType(RAPIER.RigidBodyType.Fixed, true);
@@ -1167,7 +1164,7 @@ function recyclePrize(scene, prizePool, prize) {
   prize.isDynamic = false;
   scene.remove(prize.prize);
 
-  pooledPrizes.push(prize);
+  prizePool.push(prize);
 }
 
 function acquirePrizeForSlot(
@@ -1178,8 +1175,7 @@ function acquirePrizeForSlot(
   prizePool,
   prizeColliderHandleMap,
 ) {
-  const pooledPrizes = prizePool.get(prizeType.config.id);
-  const pooledPrize = pooledPrizes?.pop() ?? null;
+  const pooledPrize = prizePool.pop() ?? null;
 
   if (!pooledPrize) {
     return createPrize(scene, world, prizeType, slot, prizeColliderHandleMap);
@@ -1254,7 +1250,6 @@ function updatePrizeRespawns(
       continue;
     }
 
-    const prizeType = getRandomArrayItem(prizeTypes);
     prizes.push(acquirePrizeForSlot(
       scene,
       world,
