@@ -153,9 +153,9 @@ const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const prizeHitVelocityMultiplier = 0.16;
 const prizeDropScoreHeight = 0.3;
-const maxRendererPixelRatio = 1.5;
-const shadowMapSize = 1024;
-const shadowUpdateInterval = 2;
+const maxRendererPixelRatio = 1;
+const shadowMapSize = 512;
+const shadowUpdateInterval = 4;
 const pointPopupLifetime = 0.85;
 const pointPopupSize = 'min(28vmin, 190px)';
 const pointPopupScreenPadding = 96;
@@ -174,11 +174,11 @@ const gunViewMaxSize = 0.65;
 const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
 const bulletSpeed = 20;
 const bulletLifetime = 6;
-const maxActiveBullets = 20;
+const maxActiveBullets = 12;
 const bulletSpawnOffset = 0.08;
 const bulletScale = 0.0065;
 const bulletColliderMinRadius = 0.025;
-const bulletTrailPointCount = 12;
+const bulletTrailPointCount = 8;
 const bulletTrailSpacing = 0.045;
 const bulletTrailColor = 0xffffff;
 const bulletTrailOpacity = 0.72;
@@ -220,7 +220,7 @@ function createCollisionGroup(memberships, filters) {
 
 function createRenderer() {
   const renderer = new THREE.WebGLRenderer({
-    antialias: true,
+    antialias: false,
     powerPreference: 'high-performance',
     stencil: false,
   });
