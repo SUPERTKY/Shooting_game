@@ -95,7 +95,7 @@ const treeConfigs = [
     Math.PI * 0.2,
   ),
 ];
-const TexturePath = './image/sky.jpg';
+const skyTexturePath = './image/sky.jpg';
 const pointImagePath = './image/Point.png';
 // 景品タイプは Prize/Prize_1.glb から Prize/Prize_10.glb まで対応します。
 // 未追加・読み込み失敗のファイルはスキップし、読み込めたタイプだけをランダム配置に使います。
@@ -1552,7 +1552,7 @@ function tickShootCooldown(cooldown, delta) {
 }
 
 async function init() {
-  await RAPIER.init({});
+  await RAPIER.init();
 
   const scene = new THREE.Scene();
 
