@@ -1149,6 +1149,69 @@ function createPrizeRespawnQueue() {
   return [];
 }
 
+function createPrizePool() {
+  return new Map();
+}
+
+function recyclePrize(scene, prizePool, prize) {
+  const pooledPrizes = prizePool.get(prize.config.id) ?? [];
+  prizePool.set(prize.config.id, pooledPrizes);
+
+  prize.prizeBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  prize.prizeBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  prize.prizeBody.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+  prize.prizeBody.setTranslation({ x: 0, y: -100, z: 0 }, true);
+  prize.prizeBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+  prize.prizeBody.sleep();
+  prize.prizeColliders.forEach((collider) => collider.setEnabled(false));
+  prize.isDynamic = false;
+  scene.remove(prize.prize);
+
+  pooledPrizes.push(prize);
+}
+
+function acquirePrizeForSlot(
+  scene,
+  world,
+  prizeType,
+  slot,
+  prizePool,
+  prizeColliderHandleMap,
+) {
+  const pooledPrizes = prizePool.get(prizeType.config.id);
+  const pooledPrize = pooledPrizes?.pop() ?? null;
+
+  if (!pooledPrize) {
+    return createPrize(scene, world, prizeType, slot, prizeColliderHandleMap);
+  }
+
+  const prizeQuaternion = new THREE.Quaternion().setFromEuler(slot.rotation);
+  pooledPrize.slot = slot;
+  pooledPrize.prize.name = `dynamic-prize-slot-${slot.id}-type-${pooledPrize.config.id}`;
+  pooledPrize.prize.position.copy(slot.position);
+  pooledPrize.prize.rotation.copy(slot.rotation);
+  scene.add(pooledPrize.prize);
+  pooledPrize.prize.updateWorldMatrix(true, true);
+
+  pooledPrize.prizeBody.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+  pooledPrize.prizeBody.setTranslation(
+    { x: slot.position.x, y: slot.position.y, z: slot.position.z },
+    true,
+  );
+  pooledPrize.prizeBody.setRotation(
+    { x: prizeQuaternion.x, y: prizeQuaternion.y, z: prizeQuaternion.z, w: prizeQuaternion.w },
+    true,
+  );
+  pooledPrize.prizeBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  pooledPrize.prizeBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  pooledPrize.prizeBody.setLinearDamping(prizeLinearDamping);
+  pooledPrize.prizeBody.setAngularDamping(prizeAngularDamping);
+  pooledPrize.prizeColliders.forEach((collider) => collider.setEnabled(true));
+  pooledPrize.isDynamic = false;
+
+  return pooledPrize;
+}
+
 function schedulePrizeRespawn(respawnQueue, slot) {
   const hasPendingRespawn = respawnQueue.some((respawn) => respawn.slot.id === slot.id);
 
@@ -1170,6 +1233,7 @@ function updatePrizeRespawns(
   respawnQueue,
   delta,
   prizeColliderHandleMap,
+  prizePool,
 ) {
   if (prizeTypes.length === 0) {
     respawnQueue.length = 0;
@@ -1190,11 +1254,13 @@ function updatePrizeRespawns(
       continue;
     }
 
-    prizes.push(createPrize(
+    const prizeType = getRandomArrayItem(prizeTypes);
+    prizes.push(acquirePrizeForSlot(
       scene,
       world,
-      getRandomArrayItem(prizeTypes),
+      prizeType,
       slot,
+      prizePool,
       prizeColliderHandleMap,
     ));
     respawnQueue.splice(index, 1);
@@ -1286,12 +1352,8 @@ function removePointPopup(pointPopups, pointPopup) {
   }
 }
 
-function removePrize(scene, world, prize, prizeColliderHandleMap = null) {
-  prize.prizeColliders.forEach((collider) => {
-    prizeColliderHandleMap?.delete(collider.handle);
-  });
-  scene.remove(prize.prize);
-  world.removeRigidBody(prize.prizeBody);
+function removePrize(scene, prizePool, prize) {
+  recyclePrize(scene, prizePool, prize);
 }
 
 function checkDroppedPrizes(
@@ -1301,7 +1363,7 @@ function checkDroppedPrizes(
   pointPopups,
   scoreState,
   respawnQueue,
-  prizeColliderHandleMap,
+  prizePool,
 ) {
   for (let index = prizes.length - 1; index >= 0; index -= 1) {
     const prize = prizes[index];
@@ -1314,7 +1376,7 @@ function checkDroppedPrizes(
     if (prizeBottomY <= prizeDropScoreHeight) {
       scoreState.points += 1;
       createPointPopup(pointPopups);
-      removePrize(scene, world, prize, prizeColliderHandleMap);
+      removePrize(scene, prizePool, prize);
       prizes.splice(index, 1);
       schedulePrizeRespawn(respawnQueue, prize.slot);
     }
@@ -1526,6 +1588,7 @@ async function init() {
   const pointPopups = [];
   const scoreState = createScoreState();
   const prizeRespawnQueue = createPrizeRespawnQueue();
+  const prizePool = createPrizePool();
   status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
@@ -1572,7 +1635,7 @@ async function init() {
       pointPopups,
       scoreState,
       prizeRespawnQueue,
-      prizeColliderHandleMap,
+      prizePool,
     );
     updatePrizeRespawns(
       scene,
@@ -1582,6 +1645,7 @@ async function init() {
       prizeRespawnQueue,
       delta,
       prizeColliderHandleMap,
+      prizePool,
     );
     syncPrizeMeshes(prizes);
     pruneBullets(scene, world, bullets, delta, bulletColliderHandleMap);
