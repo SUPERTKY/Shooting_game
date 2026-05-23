@@ -1293,6 +1293,13 @@ function updatePrizeRespawns(
       continue;
     }
 
+    const prizeType = getRandomArrayItem(prizeTypes);
+
+    if (!prizeType) {
+      respawnQueue.splice(index, 1);
+      continue;
+    }
+
     prizes.push(acquirePrizeForSlot(
       scene,
       world,
