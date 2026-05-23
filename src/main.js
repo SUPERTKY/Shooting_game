@@ -20,9 +20,9 @@ const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const shootButton = document.querySelector('#shoot-button');
 const cooldownGaugeFill = document.querySelector('#cooldown-gauge-fill');
-const streamSessionInput = document.querySelector('#stream-session-id');
 const startStreamButton = document.querySelector('#start-stream');
 const streamStatus = document.querySelector('#stream-status');
+const streamSessionId = 'booth-01';
 const firebaseConfig = {
   apiKey: 'AIzaSyCr-MZ59oUu78W--a6Ip10WLEKmgzbFRYI',
   authDomain: 'shooting-game-b50b6.firebaseapp.com',
@@ -243,11 +243,7 @@ function setStreamStatus(message) {
 }
 
 async function startScreenStreamWithFirebase(renderer) {
-  const sessionId = streamSessionInput.value.trim();
-  if (!sessionId) {
-    throw new Error('共有先セッションIDを入力してください。');
-  }
-
+  const sessionId = streamSessionId;
   const app = initializeApp(firebaseConfig, `stream-${sessionId}`);
   const db = getFirestore(app);
 
@@ -1719,7 +1715,7 @@ async function init() {
     try {
       setStreamStatus('画面共有の許可待ち...');
       activeStreamSession = await startScreenStreamWithFirebase(renderer);
-      setStreamStatus(`オファー作成完了: ${streamSessionInput.value.trim()}`);
+      setStreamStatus(`オファー作成完了: ${streamSessionId}`);
     } catch (error) {
       console.error(error);
       setStreamStatus(`開始失敗: ${error.message}`);

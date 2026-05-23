@@ -154,13 +154,6 @@
         font-size: 1rem;
       }
 
-      #stream-controls label {
-        display: grid;
-        gap: 0.25rem;
-        font-size: 0.85rem;
-      }
-
-      #stream-controls input,
       #stream-controls button {
         font: inherit;
       }
@@ -183,10 +176,6 @@
 
     <section id="stream-controls" aria-label="画面共有設定">
       <h2>画面共有（WebRTC / Firebase）</h2>
-      <label>
-        共有先セッションID
-        <input id="stream-session-id" type="text" placeholder="例: booth-01" />
-      </label>
       <button id="start-stream" type="button">画面共有を開始</button>
       <p id="stream-status">未接続</p>
     </section>
