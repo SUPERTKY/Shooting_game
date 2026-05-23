@@ -1706,20 +1706,34 @@ async function init() {
   const eventQueue = new RAPIER.EventQueue(true);
   const renderer = createRenderer();
   let activeStreamSession = null;
+  let isStartingStream = false;
   startStreamButton.addEventListener('click', async () => {
+    if (isStartingStream) {
+      setStreamStatus('画面共有の許可ダイアログを確認してください。');
+      return;
+    }
+
     if (activeStreamSession) {
       setStreamStatus('すでに共有中です。停止はブラウザ共有UIから行ってください。');
       return;
     }
 
     try {
+      isStartingStream = true;
+      startStreamButton.disabled = true;
       setStreamStatus('画面共有の許可待ち...');
       activeStreamSession = await startScreenStreamWithFirebase(renderer);
+      activeStreamSession.stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        activeStreamSession = null;
+      });
       setStreamStatus(`オファー作成完了: ${streamSessionId}`);
     } catch (error) {
       console.error(error);
       setStreamStatus(`開始失敗: ${error.message}`);
       activeStreamSession = null;
+    } finally {
+      isStartingStream = false;
+      startStreamButton.disabled = false;
     }
   });
   const camera = createCamera();
