@@ -20,10 +20,17 @@ const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const shootButton = document.querySelector('#shoot-button');
 const cooldownGaugeFill = document.querySelector('#cooldown-gauge-fill');
-const firebaseConfigInput = document.querySelector('#firebase-config-input');
 const streamSessionInput = document.querySelector('#stream-session-id');
 const startStreamButton = document.querySelector('#start-stream');
 const streamStatus = document.querySelector('#stream-status');
+const firebaseConfig = {
+  apiKey: 'AIzaSyCr-MZ59oUu78W--a6Ip10WLEKmgzbFRYI',
+  authDomain: 'shooting-game-b50b6.firebaseapp.com',
+  projectId: 'shooting-game-b50b6',
+  storageBucket: 'shooting-game-b50b6.firebasestorage.app',
+  messagingSenderId: '684671189779',
+  appId: '1:684671189779:web:5b105a43d00adb7d76d0e6',
+};
 const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
@@ -235,21 +242,12 @@ function setStreamStatus(message) {
   streamStatus.textContent = message;
 }
 
-function parseFirebaseConfig(configText) {
-  try {
-    return JSON.parse(configText);
-  } catch (error) {
-    throw new Error('Firebase Config の JSON 形式が不正です。');
-  }
-}
-
 async function startScreenStreamWithFirebase(renderer) {
   const sessionId = streamSessionInput.value.trim();
   if (!sessionId) {
     throw new Error('共有先セッションIDを入力してください。');
   }
 
-  const firebaseConfig = parseFirebaseConfig(firebaseConfigInput.value.trim());
   const app = initializeApp(firebaseConfig, `stream-${sessionId}`);
   const db = getFirestore(app);
 
