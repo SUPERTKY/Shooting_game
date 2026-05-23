@@ -1253,7 +1253,7 @@ function updatePrizeRespawns(
     prizes.push(acquirePrizeForSlot(
       scene,
       world,
-      getRandomArrayItem(prizeTypes),
+      prizeType,
       slot,
       prizePool,
       prizeColliderHandleMap,
