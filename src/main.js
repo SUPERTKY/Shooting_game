@@ -156,6 +156,7 @@ const prizeDropScoreHeight = 0.3;
 const maxRendererPixelRatio = 1;
 const shadowMapSize = 512;
 const shadowUpdateInterval = 4;
+const textureAnisotropy = 1;
 const pointPopupLifetime = 0.85;
 const pointPopupSize = 'min(28vmin, 190px)';
 const pointPopupScreenPadding = 96;
@@ -248,11 +249,43 @@ function createCamera() {
   return camera;
 }
 
+function optimizeTextureMemory(texture, {
+  useMipmaps = true,
+  anisotropy = textureAnisotropy,
+} = {}) {
+  if (!texture) {
+    return;
+  }
+
+  texture.generateMipmaps = useMipmaps;
+  texture.anisotropy = anisotropy;
+  texture.needsUpdate = true;
+}
+
+function optimizeModelTextureMemory(root) {
+  root.traverse((child) => {
+    if (!child.isMesh || !child.material) {
+      return;
+    }
+
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material) => {
+      optimizeTextureMemory(material.map);
+      optimizeTextureMemory(material.normalMap);
+      optimizeTextureMemory(material.roughnessMap);
+      optimizeTextureMemory(material.metalnessMap);
+      optimizeTextureMemory(material.emissiveMap);
+      optimizeTextureMemory(material.aoMap);
+    });
+  });
+}
+
 
 async function loadPointTexture() {
   const textureLoader = new THREE.TextureLoader();
   const pointTexture = await textureLoader.loadAsync(pointImagePath);
   pointTexture.colorSpace = THREE.SRGBColorSpace;
+  optimizeTextureMemory(pointTexture, { useMipmaps: false });
 
   return pointTexture;
 }
@@ -261,6 +294,7 @@ async function configureBackground(scene) {
   const textureLoader = new THREE.TextureLoader();
   const skyTexture = await textureLoader.loadAsync(skyTexturePath);
   skyTexture.colorSpace = THREE.SRGBColorSpace;
+  optimizeTextureMemory(skyTexture, { useMipmaps: false });
   scene.background = skyTexture;
 
   return { skyTexture };
@@ -293,6 +327,7 @@ async function loadGround(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(groundPath);
   const ground = gltf.scene;
+  optimizeModelTextureMemory(ground);
   ground.name = 'visual-ground';
 
   ground.updateWorldMatrix(true, true);
@@ -365,6 +400,7 @@ async function loadTable(camera) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(tablePath);
   const tableModel = gltf.scene;
+  optimizeModelTextureMemory(tableModel);
   const table = new THREE.Group();
   table.name = 'camera-front-table';
 
@@ -397,6 +433,7 @@ async function loadTable(camera) {
 async function loadTree(scene, config, loader) {
   const gltf = await loader.loadAsync(config.path);
   const treeModel = gltf.scene;
+  optimizeModelTextureMemory(treeModel);
   const tree = new THREE.Group();
   tree.name = `decorative-${config.id}`;
 
@@ -442,6 +479,7 @@ async function loadTent(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(tentPath);
   const tent = gltf.scene;
+  optimizeModelTextureMemory(tent);
   tent.name = 'visual-tent';
 
   tent.updateWorldMatrix(true, true);
@@ -482,6 +520,7 @@ async function loadGun(camera) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(gunPath);
   const gunModel = gltf.scene;
+  optimizeModelTextureMemory(gunModel);
   const gun = new THREE.Group();
   gun.name = 'camera-gun';
 
@@ -518,6 +557,7 @@ async function loadBulletTemplate() {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(bulletPath);
   const bulletModel = gltf.scene;
+  optimizeModelTextureMemory(bulletModel);
   bulletModel.name = 'bullet-template';
 
   bulletModel.updateWorldMatrix(true, true);
@@ -847,6 +887,7 @@ async function loadWall(scene, world) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(wallPath);
   const wall = gltf.scene;
+  optimizeModelTextureMemory(wall);
   wall.name = 'collision-wall';
   wall.position.set(0, 0, -2.5);
   wall.rotation.y = wallRotationY;
@@ -882,6 +923,7 @@ async function loadShelf(scene, world, wallBox) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(shelfPath);
   const shelf = gltf.scene;
+  optimizeModelTextureMemory(shelf);
   shelf.name = 'collision-shelf';
 
   shelf.scale.setScalar(shelfScale);
@@ -990,6 +1032,7 @@ async function loadPrizeType(config, loader) {
   }
 
   const prizeModel = gltf.scene;
+  optimizeModelTextureMemory(prizeModel);
 
   prizeModel.updateWorldMatrix(true, true);
   const prizeBox = new THREE.Box3().setFromObject(prizeModel);
