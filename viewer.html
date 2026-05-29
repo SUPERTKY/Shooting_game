@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shooting Game Viewer</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "firebase/app": "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js"
+        }
+      }
+    </script>
+    <script type="module" src="./src/viewer.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: #eef3ff;
+        background: #111722;
+      }
+
+      main {
+        display: grid;
+        gap: 1rem;
+        width: min(100% - 2rem, 960px);
+        margin: 0 auto;
+        padding: 1rem;
+      }
+
+      form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: end;
+        padding: 1rem;
+        border-radius: 0.75rem;
+        background: rgb(9 13 22 / 72%);
+      }
+
+      label {
+        display: grid;
+        gap: 0.25rem;
+      }
+
+      input,
+      button {
+        font: inherit;
+      }
+
+      input {
+        min-width: 14rem;
+      }
+
+      video {
+        width: 100%;
+        max-height: 72vh;
+        border-radius: 0.75rem;
+        background: #000;
+      }
+
+      #status {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Shooting Game Viewer</h1>
+      <form id="connectForm">
+        <label>
+          sessionId
+          <input id="sessionIdInput" value="booth-01" autocomplete="off" />
+        </label>
+        <button id="connectBtn" type="submit">接続</button>
+        <p id="status">未接続</p>
+      </form>
+      <video id="remoteVideo" autoplay playsinline controls muted></video>
+    </main>
+  </body>
+</html>

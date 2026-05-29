@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { initializeApp } from 'firebase/app';
+import { firebaseConfig } from './firebaseConfig.js';
 import {
   addDoc,
   collection,
@@ -23,14 +24,8 @@ const cooldownGaugeFill = document.querySelector('#cooldown-gauge-fill');
 const startStreamButton = document.querySelector('#start-stream');
 const streamStatus = document.querySelector('#stream-status');
 const streamSessionId = 'booth-01';
-const firebaseConfig = {
-  apiKey: 'AIzaSyCr-MZ59oUu78W--a6Ip10WLEKmgzbFRYI',
-  authDomain: 'shooting-game-b50b6.firebaseapp.com',
-  projectId: 'shooting-game-b50b6',
-  storageBucket: 'shooting-game-b50b6.firebasestorage.app',
-  messagingSenderId: '684671189779',
-  appId: '1:684671189779:web:5b105a43d00adb7d76d0e6',
-};
+const firebaseApp = initializeApp(firebaseConfig);
+const firestoreDb = getFirestore(firebaseApp);
 const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
@@ -244,9 +239,9 @@ function setStreamStatus(message) {
 
 async function startScreenStreamWithFirebase(renderer) {
   const sessionId = streamSessionId;
-  const app = initializeApp(firebaseConfig, `stream-${sessionId}`);
-  const db = getFirestore(app);
+  const db = firestoreDb;
 
+  const sessionCreatedAt = Date.now();
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: true,
     audio: false,
@@ -264,14 +259,17 @@ async function startScreenStreamWithFirebase(renderer) {
 
   peerConnection.onicecandidate = async (event) => {
     if (event.candidate) {
-      await addDoc(offerCandidatesRef, event.candidate.toJSON());
+      await addDoc(offerCandidatesRef, {
+        ...event.candidate.toJSON(),
+        sessionCreatedAt,
+      });
     }
   };
 
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
   await setDoc(sessionRef, {
-    createdAt: Date.now(),
+    createdAt: sessionCreatedAt,
     gameViewport: {
       width: renderer.domElement.width,
       height: renderer.domElement.height,
@@ -300,7 +298,14 @@ async function startScreenStreamWithFirebase(renderer) {
         return;
       }
 
-      peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+      const { sessionCreatedAt: candidateSessionCreatedAt, ...candidate } = change.doc.data();
+      if (candidateSessionCreatedAt !== sessionCreatedAt) {
+        return;
+      }
+
+      peerConnection
+        .addIceCandidate(new RTCIceCandidate(candidate))
+        .catch((error) => setStreamStatus(`answer ICE candidate 追加失敗: ${error.message}`));
     });
   });
 
