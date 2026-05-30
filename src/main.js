@@ -1,18 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { initializeApp } from 'firebase/app';
-import { firebaseConfig } from './firebaseConfig.js';
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getFirestore,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
 
 const status = document.querySelector('#status');
 const canvasContainer = document.querySelector('#game-canvas');
@@ -21,11 +9,6 @@ const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const shootButton = document.querySelector('#shoot-button');
 const cooldownGaugeFill = document.querySelector('#cooldown-gauge-fill');
-const startStreamButton = document.querySelector('#start-stream');
-const streamStatus = document.querySelector('#stream-status');
-const streamSessionId = 'booth-01';
-const firebaseApp = initializeApp(firebaseConfig);
-const firestoreDb = getFirestore(firebaseApp);
 const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
@@ -232,94 +215,34 @@ const prizeBottomQuaternion = new THREE.Quaternion();
 const prizeBottomScale = new THREE.Vector3(1, 1, 1);
 const prizeBottomCorner = new THREE.Vector3();
 
+function getViewportSize() {
+  const visualViewport = window.visualViewport;
+  const viewportWidth = visualViewport?.width
+    ?? window.innerWidth
+    ?? document.documentElement.clientWidth
+    ?? 1;
+  const viewportHeight = visualViewport?.height
+    ?? window.innerHeight
+    ?? document.documentElement.clientHeight
+    ?? 1;
+  const width = Math.max(Math.round(viewportWidth), 1);
+  const height = Math.max(Math.round(viewportHeight), 1);
 
-function setStreamStatus(message) {
-  streamStatus.textContent = message;
+  return { width, height };
 }
 
-async function startScreenStreamWithFirebase(renderer) {
-  const sessionId = streamSessionId;
-  const db = firestoreDb;
+function getViewportAspect() {
+  const { width, height } = getViewportSize();
 
-  const sessionCreatedAt = Date.now();
-  const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
-    audio: false,
-  });
-
-  const peerConnection = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-  });
-
-  stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
-
-  const sessionRef = doc(db, 'screenShareSessions', sessionId);
-  const offerCandidatesRef = collection(sessionRef, 'offerCandidates');
-  const answerCandidatesRef = collection(sessionRef, 'answerCandidates');
-
-  peerConnection.onicecandidate = async (event) => {
-    if (event.candidate) {
-      await addDoc(offerCandidatesRef, {
-        ...event.candidate.toJSON(),
-        sessionCreatedAt,
-      });
-    }
-  };
-
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-  await setDoc(sessionRef, {
-    createdAt: sessionCreatedAt,
-    gameViewport: {
-      width: renderer.domElement.width,
-      height: renderer.domElement.height,
-    },
-    offer: {
-      type: offer.type,
-      sdp: offer.sdp,
-    },
-    status: 'waiting-answer',
-  });
-
-  onSnapshot(sessionRef, async (snapshot) => {
-    const data = snapshot.data();
-    if (!data?.answer || peerConnection.currentRemoteDescription) {
-      return;
-    }
-
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-    setStreamStatus(`接続完了: ${sessionId}`);
-    await updateDoc(sessionRef, { status: 'connected' });
-  });
-
-  onSnapshot(answerCandidatesRef, (snapshot) => {
-    snapshot.docChanges().forEach((change) => {
-      if (change.type !== 'added') {
-        return;
-      }
-
-      const { sessionCreatedAt: candidateSessionCreatedAt, ...candidate } = change.doc.data();
-      if (candidateSessionCreatedAt !== sessionCreatedAt) {
-        return;
-      }
-
-      peerConnection
-        .addIceCandidate(new RTCIceCandidate(candidate))
-        .catch((error) => setStreamStatus(`answer ICE candidate 追加失敗: ${error.message}`));
-    });
-  });
-
-  stream.getVideoTracks()[0]?.addEventListener('ended', async () => {
-    setStreamStatus('画面共有が終了しました。');
-    peerConnection.close();
-    const current = await getDoc(sessionRef);
-    if (current.exists()) {
-      await updateDoc(sessionRef, { status: 'ended' });
-    }
-  });
-
-  return { stream, peerConnection, sessionRef };
+  return width / height;
 }
+
+function setRendererViewport(renderer) {
+  const { width, height } = getViewportSize();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxRendererPixelRatio));
+  renderer.setSize(width, height);
+}
+
 function createCollisionGroup(memberships, filters) {
   return (memberships << 16) | filters;
 }
@@ -327,11 +250,10 @@ function createCollisionGroup(memberships, filters) {
 function createRenderer() {
   const renderer = new THREE.WebGLRenderer({
     antialias: false,
-    powerPreference: 'high-performance',
+    powerPreference: 'default',
     stencil: false,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxRendererPixelRatio));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  setRendererViewport(renderer);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -344,7 +266,7 @@ function createRenderer() {
 function createCamera() {
   const camera = new THREE.PerspectiveCamera(
     60,
-    window.innerWidth / window.innerHeight,
+    getViewportAspect(),
     0.1,
     100,
   );
@@ -535,10 +457,22 @@ async function loadTable(camera) {
   return { table, tableModel };
 }
 
-async function loadTree(scene, config, loader) {
-  const gltf = await loader.loadAsync(config.path);
-  const treeModel = gltf.scene;
-  optimizeModelTextureMemory(treeModel);
+async function loadTreeTemplate(path, loader, templateCache) {
+  if (templateCache.has(path)) {
+    return templateCache.get(path);
+  }
+
+  const gltf = await loader.loadAsync(path);
+  const treeTemplate = gltf.scene;
+  optimizeModelTextureMemory(treeTemplate);
+  templateCache.set(path, treeTemplate);
+
+  return treeTemplate;
+}
+
+async function loadTree(scene, config, loader, templateCache) {
+  const treeTemplate = await loadTreeTemplate(config.path, loader, templateCache);
+  const treeModel = treeTemplate.clone(true);
   const tree = new THREE.Group();
   tree.name = `decorative-${config.id}`;
 
@@ -573,9 +507,12 @@ async function loadTree(scene, config, loader) {
 
 async function loadTrees(scene) {
   const loader = new GLTFLoader();
-  const loadedTrees = await Promise.all(
-    treeConfigs.map((config) => loadTree(scene, config, loader)),
-  );
+  const templateCache = new Map();
+  const loadedTrees = [];
+
+  for (const config of treeConfigs) {
+    loadedTrees.push(await loadTree(scene, config, loader, templateCache));
+  }
 
   return loadedTrees;
 }
@@ -1169,11 +1106,17 @@ async function loadPrizeType(config, loader) {
 
 async function loadPrizeTypes() {
   const loader = new GLTFLoader();
-  const loadedPrizeTypes = await Promise.all(
-    prizeTypeConfigs.map((config) => loadPrizeType(config, loader)),
-  );
+  const loadedPrizeTypes = [];
 
-  return loadedPrizeTypes.filter(Boolean);
+  for (const config of prizeTypeConfigs) {
+    const prizeType = await loadPrizeType(config, loader);
+
+    if (prizeType) {
+      loadedPrizeTypes.push(prizeType);
+    }
+  }
+
+  return loadedPrizeTypes;
 }
 
 function getRandomArrayItem(items) {
@@ -1424,10 +1367,11 @@ function createScoreState() {
 }
 
 function getRandomScreenPosition() {
-  const minX = Math.min(pointPopupScreenPadding, window.innerWidth / 2);
-  const minY = Math.min(pointPopupScreenPadding, window.innerHeight / 2);
-  const maxX = Math.max(window.innerWidth - minX, minX);
-  const maxY = Math.max(window.innerHeight - minY, minY);
+  const { width, height } = getViewportSize();
+  const minX = Math.min(pointPopupScreenPadding, width / 2);
+  const minY = Math.min(pointPopupScreenPadding, height / 2);
+  const maxX = Math.max(width - minX, minX);
+  const maxY = Math.max(height - minY, minY);
 
   return {
     x: THREE.MathUtils.randFloat(minX, maxX),
@@ -1710,37 +1654,6 @@ async function init() {
   const world = new RAPIER.World(gravity);
   const eventQueue = new RAPIER.EventQueue(true);
   const renderer = createRenderer();
-  let activeStreamSession = null;
-  let isStartingStream = false;
-  startStreamButton.addEventListener('click', async () => {
-    if (isStartingStream) {
-      setStreamStatus('画面共有の許可ダイアログを確認してください。');
-      return;
-    }
-
-    if (activeStreamSession) {
-      setStreamStatus('すでに共有中です。停止はブラウザ共有UIから行ってください。');
-      return;
-    }
-
-    try {
-      isStartingStream = true;
-      startStreamButton.disabled = true;
-      setStreamStatus('画面共有の許可待ち...');
-      activeStreamSession = await startScreenStreamWithFirebase(renderer);
-      activeStreamSession.stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-        activeStreamSession = null;
-      });
-      setStreamStatus(`オファー作成完了: ${streamSessionId}`);
-    } catch (error) {
-      console.error(error);
-      setStreamStatus(`開始失敗: ${error.message}`);
-      activeStreamSession = null;
-    } finally {
-      isStartingStream = false;
-      startStreamButton.disabled = false;
-    }
-  });
   const camera = createCamera();
   scene.add(camera);
   const background = await configureBackground(scene);
@@ -1773,14 +1686,14 @@ async function init() {
   status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = getViewportAspect();
     camera.updateProjectionMatrix();
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxRendererPixelRatio));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    setRendererViewport(renderer);
     renderer.shadowMap.needsUpdate = true;
   }
 
   window.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('resize', onResize);
 
   shootButton.addEventListener('click', () => {
     if (isShootCoolingDown(shootCooldown)) {
