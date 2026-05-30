@@ -2,16 +2,16 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 
-const canvasContainer = document.querySelector('#game-canvas');
+const canvasContainer = document.querySelector('#booth-canvas');
 const ringUi = document.querySelector('#target-ring-ui');
 const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
-const shootButton = document.querySelector('#shoot-button');
+const actionButton = document.querySelector('#action-button');
 const cooldownGaugeFill = document.querySelector('#cooldown-gauge-fill');
 const wallPath = './assets/wall.glb';
-const gunPath = './assets/gun.glb';
-const bulletPath = './assets/bullet.glb';
-const gunshotSoundPath = './Sound/gun.mp3';
+const launcherPath = './assets/launcher.glb';
+const tokenPath = './assets/token.glb';
+const popSoundPath = './Sound/pop.mp3';
 const tablePath = './assets/Table.glb';
 const groundPath = './assets/Ground.glb';
 const shelfPath = './assets/shelf.glb';
@@ -51,7 +51,7 @@ const ringTraceAreaScale = 0.8;
 const cameraViewHeightRatio = 0.44;
 const cameraBackDistanceMultiplier = 2.1;
 const cameraHorizontalOffset = -0.22;
-const gunViewPosition = new THREE.Vector3(0.18, -0.12, -0.55);
+const launcherViewPosition = new THREE.Vector3(0.18, -0.12, -0.55);
 const tableViewPosition = new THREE.Vector3(0, -0.4, -0.5);
 const tableViewRotation = new THREE.Euler(0, 0, 0);
 const tableViewQuaternion = new THREE.Quaternion().setFromEuler(tableViewRotation);
@@ -164,47 +164,47 @@ const shelfWallGap = 0.28;
 const shelfScale = 0.85;
 const shelfRotationY = -Math.PI / 2;
 const shelfHeightOffset = 0.3;
-const gunViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
-const gunAimLimits = {
+const launcherViewRotation = new THREE.Euler(0, -Math.PI / 2, 0);
+const launcherAimLimits = {
   maxYaw: THREE.MathUtils.degToRad(34),
   maxPitch: THREE.MathUtils.degToRad(30),
 };
-const gunViewMaxSize = 0.65;
-const gunForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
-const bulletSpeed = 20;
-const bulletLifetime = 6;
-const maxActiveBullets = 12;
-const bulletSpawnOffset = 0.08;
-const bulletScale = 0.0065;
-const bulletColliderMinRadius = 0.025;
-const bulletTrailPointCount = 8;
-const bulletTrailSpacing = 0.045;
-const bulletTrailColor = 0xffffff;
-const bulletTrailOpacity = 0.72;
-const shootCooldownDuration = 1;
-const gunForwardDirection = new THREE.Vector3(-1, 0, 0);
+const launcherViewMaxSize = 0.65;
+const launcherForwardPointOffset = new THREE.Vector3(-0.46, 0.03, 0);
+const tokenSpeed = 20;
+const tokenLifetime = 6;
+const maxActiveTokens = 12;
+const tokenSpawnOffset = 0.08;
+const tokenScale = 0.0065;
+const tokenColliderMinRadius = 0.025;
+const tokenTrailPointCount = 8;
+const tokenTrailSpacing = 0.045;
+const tokenTrailColor = 0xffffff;
+const tokenTrailOpacity = 0.72;
+const actionCooldownDuration = 1;
+const launcherForwardDirection = new THREE.Vector3(-1, 0, 0);
 const collisionGroups = {
   environment: 0x0001,
-  bullet: 0x0002,
+  token: 0x0002,
   prize: 0x0004,
   tent: 0x0008,
 };
 const environmentCollisionGroup = createCollisionGroup(
   collisionGroups.environment,
-  collisionGroups.environment | collisionGroups.bullet | collisionGroups.prize,
+  collisionGroups.environment | collisionGroups.token | collisionGroups.prize,
 );
-const bulletCollisionGroup = createCollisionGroup(
-  collisionGroups.bullet,
+const tokenCollisionGroup = createCollisionGroup(
+  collisionGroups.token,
   collisionGroups.environment | collisionGroups.prize | collisionGroups.tent,
 );
 const prizeCollisionGroup = createCollisionGroup(
   collisionGroups.prize,
-  collisionGroups.environment | collisionGroups.bullet | collisionGroups.prize,
+  collisionGroups.environment | collisionGroups.token | collisionGroups.prize,
 );
-// テントは弾とだけ衝突する専用グループにして、景品や地面などには反応させない。
+// テントはコマとだけ衝突する専用グループにして、景品や地面などには反応させない。
 const tentCollisionGroup = createCollisionGroup(
   collisionGroups.tent,
-  collisionGroups.bullet,
+  collisionGroups.token,
 );
 const clock = new THREE.Clock();
 const prizeBottomMatrix = new THREE.Matrix4();
@@ -281,8 +281,8 @@ function freezeStaticObjectMatrices(object) {
   });
 }
 
-function hasActiveBullets(bullets) {
-  return bullets.length > 0;
+function hasActiveTokens(tokens) {
+  return tokens.length > 0;
 }
 
 function hasAwakeDynamicPrizes(prizes) {
@@ -297,8 +297,8 @@ function hasAwakeDynamicPrizes(prizes) {
   });
 }
 
-function hasPendingVisualWork(bullets, prizes, ring) {
-  return hasActiveBullets(bullets)
+function hasPendingVisualWork(tokens, prizes, ring) {
+  return hasActiveTokens(tokens)
     || hasAwakeDynamicPrizes(prizes)
     || ring.needsRender;
 }
@@ -435,13 +435,13 @@ function keepCameraChildLevelWithWorld(child, camera, worldQuaternion) {
     .multiply(worldQuaternion);
 }
 
-function createGunMuzzleAnchor(gunScale) {
-  const anchorScale = gunScale > 0 ? gunScale : 1;
-  const muzzleAnchor = new THREE.Object3D();
-  muzzleAnchor.name = 'gun-muzzle-anchor';
-  muzzleAnchor.position.copy(gunForwardPointOffset).divideScalar(anchorScale);
+function createLauncherLaunchPointAnchor(launcherScale) {
+  const anchorScale = launcherScale > 0 ? launcherScale : 1;
+  const launchPointAnchor = new THREE.Object3D();
+  launchPointAnchor.name = 'launcher-launchPoint-anchor';
+  launchPointAnchor.position.copy(launcherForwardPointOffset).divideScalar(anchorScale);
 
-  return muzzleAnchor;
+  return launchPointAnchor;
 }
 
 async function loadTable(camera) {
@@ -582,115 +582,115 @@ async function loadTent(scene, world) {
   return { tent, tentScale, tentBody, tentColliders };
 }
 
-async function loadGun(camera) {
+async function loadLauncher(camera) {
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(gunPath);
-  const gunModel = gltf.scene;
-  optimizeModelTextureMemory(gunModel);
-  const gun = new THREE.Group();
-  gun.name = 'camera-gun';
+  const gltf = await loader.loadAsync(launcherPath);
+  const launcherModel = gltf.scene;
+  optimizeModelTextureMemory(launcherModel);
+  const launcher = new THREE.Group();
+  launcher.name = 'camera-launcher';
 
-  gunModel.updateWorldMatrix(true, true);
-  const gunBox = new THREE.Box3().setFromObject(gunModel);
-  const gunCenter = gunBox.getCenter(new THREE.Vector3());
-  const gunSize = gunBox.getSize(new THREE.Vector3());
-  const gunMaxSize = Math.max(gunSize.x, gunSize.y, gunSize.z);
-  const gunScale = gunMaxSize > 0 ? gunViewMaxSize / gunMaxSize : 1;
+  launcherModel.updateWorldMatrix(true, true);
+  const launcherBox = new THREE.Box3().setFromObject(launcherModel);
+  const launcherCenter = launcherBox.getCenter(new THREE.Vector3());
+  const launcherSize = launcherBox.getSize(new THREE.Vector3());
+  const launcherMaxSize = Math.max(launcherSize.x, launcherSize.y, launcherSize.z);
+  const launcherScale = launcherMaxSize > 0 ? launcherViewMaxSize / launcherMaxSize : 1;
 
-  gunModel.position.sub(gunCenter);
-  gun.add(gunModel);
-  gun.scale.setScalar(gunScale);
-  gun.position.copy(gunViewPosition);
-  gun.rotation.copy(gunViewRotation);
+  launcherModel.position.sub(launcherCenter);
+  launcher.add(launcherModel);
+  launcher.scale.setScalar(launcherScale);
+  launcher.position.copy(launcherViewPosition);
+  launcher.rotation.copy(launcherViewRotation);
 
-  gun.traverse((child) => {
+  launcher.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = enableRealtimeShadows;
       child.receiveShadow = enableRealtimeShadows;
     }
   });
 
-  const muzzleAnchor = createGunMuzzleAnchor(gunScale);
-  gun.add(muzzleAnchor);
+  const launchPointAnchor = createLauncherLaunchPointAnchor(launcherScale);
+  launcher.add(launchPointAnchor);
 
-  camera.add(gun);
+  camera.add(launcher);
 
-  return { gun, gunModel, muzzleAnchor };
+  return { launcher, launcherModel, launchPointAnchor };
 }
 
 
-async function loadBulletTemplate() {
+async function loadTokenTemplate() {
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(bulletPath);
-  const bulletModel = gltf.scene;
-  optimizeModelTextureMemory(bulletModel);
-  bulletModel.name = 'bullet-template';
+  const gltf = await loader.loadAsync(tokenPath);
+  const tokenModel = gltf.scene;
+  optimizeModelTextureMemory(tokenModel);
+  tokenModel.name = 'token-template';
 
-  bulletModel.updateWorldMatrix(true, true);
-  const bulletBox = new THREE.Box3().setFromObject(bulletModel);
-  const bulletCenter = bulletBox.getCenter(new THREE.Vector3());
-  const bulletSize = bulletBox.getSize(new THREE.Vector3());
+  tokenModel.updateWorldMatrix(true, true);
+  const tokenBox = new THREE.Box3().setFromObject(tokenModel);
+  const tokenCenter = tokenBox.getCenter(new THREE.Vector3());
+  const tokenSize = tokenBox.getSize(new THREE.Vector3());
 
-  bulletModel.position.sub(bulletCenter);
-  bulletModel.scale.setScalar(bulletScale);
-  bulletModel.traverse((child) => {
+  tokenModel.position.sub(tokenCenter);
+  tokenModel.scale.setScalar(tokenScale);
+  tokenModel.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = false;
       child.receiveShadow = false;
     }
   });
 
-  const bulletRadius = Math.max(
-    (Math.max(bulletSize.x, bulletSize.y, bulletSize.z) * bulletScale) / 2,
-    bulletColliderMinRadius,
+  const tokenRadius = Math.max(
+    (Math.max(tokenSize.x, tokenSize.y, tokenSize.z) * tokenScale) / 2,
+    tokenColliderMinRadius,
   );
 
-  return { model: bulletModel, radius: bulletRadius };
+  return { model: tokenModel, radius: tokenRadius };
 }
 
-function getGunMuzzleWorldTransform(gun) {
-  const muzzlePosition = new THREE.Vector3();
-  const gunQuaternion = new THREE.Quaternion();
-  const muzzleDirection = gunForwardDirection.clone();
+function getLauncherLaunchPointWorldTransform(launcher) {
+  const launchPointPosition = new THREE.Vector3();
+  const launcherQuaternion = new THREE.Quaternion();
+  const launchPointDirection = launcherForwardDirection.clone();
 
-  gun.muzzleAnchor.getWorldPosition(muzzlePosition);
-  gun.gun.getWorldQuaternion(gunQuaternion);
-  muzzleDirection.applyQuaternion(gunQuaternion).normalize();
-  muzzlePosition.addScaledVector(muzzleDirection, bulletSpawnOffset);
+  launcher.launchPointAnchor.getWorldPosition(launchPointPosition);
+  launcher.launcher.getWorldQuaternion(launcherQuaternion);
+  launchPointDirection.applyQuaternion(launcherQuaternion).normalize();
+  launchPointPosition.addScaledVector(launchPointDirection, tokenSpawnOffset);
 
-  return { muzzlePosition, muzzleDirection };
+  return { launchPointPosition, launchPointDirection };
 }
 
 
-function createGunshotSound() {
-  const gunshotSound = new Audio(gunshotSoundPath);
-  gunshotSound.preload = 'auto';
+function createPopSound() {
+  const popSound = new Audio(popSoundPath);
+  popSound.preload = 'auto';
 
-  return gunshotSound;
+  return popSound;
 }
 
-function playGunshotSound(gunshotSound) {
-  const sound = gunshotSound.cloneNode();
+function playPopSound(popSound) {
+  const sound = popSound.cloneNode();
   sound.currentTime = 0;
   sound.play().catch((error) => {
-    console.warn('銃声の再生に失敗しました。', error);
+    console.warn('効果音の再生に失敗しました。', error);
   });
 }
 
-function createBulletTrail(muzzlePosition, muzzleDirection) {
-  const trailPositions = Array.from({ length: bulletTrailPointCount }, (_, index) => (
-    muzzlePosition.clone().addScaledVector(muzzleDirection, -bulletTrailSpacing * index)
+function createTokenTrail(launchPointPosition, launchPointDirection) {
+  const trailPositions = Array.from({ length: tokenTrailPointCount }, (_, index) => (
+    launchPointPosition.clone().addScaledVector(launchPointDirection, -tokenTrailSpacing * index)
   ));
-  const trailPositionBuffer = new Float32Array(bulletTrailPointCount * 3);
+  const trailPositionBuffer = new Float32Array(tokenTrailPointCount * 3);
   const trailGeometry = new THREE.BufferGeometry();
   const trailMaterial = new THREE.LineBasicMaterial({
-    color: bulletTrailColor,
+    color: tokenTrailColor,
     transparent: true,
-    opacity: bulletTrailOpacity,
+    opacity: tokenTrailOpacity,
     depthWrite: false,
   });
   const trail = new THREE.Line(trailGeometry, trailMaterial);
-  trail.name = 'bullet-white-trail';
+  trail.name = 'token-white-trail';
   trail.frustumCulled = false;
   trail.renderOrder = 1;
 
@@ -722,118 +722,118 @@ function updateTrailGeometry(trail, trailPositions, trailPositionBuffer) {
   }
 }
 
-function updateBulletTrail(bullet) {
-  const positions = bullet.trail.positions;
+function updateTokenTrail(token) {
+  const positions = token.trail.positions;
 
   for (let index = positions.length - 1; index > 0; index -= 1) {
     positions[index].copy(positions[index - 1]);
   }
 
-  positions[0].copy(bullet.mesh.position);
+  positions[0].copy(token.mesh.position);
   updateTrailGeometry(
-    bullet.trail.line,
+    token.trail.line,
     positions,
-    bullet.trail.positionBuffer,
+    token.trail.positionBuffer,
   );
 }
 
-function disposeBulletTrail(trail) {
+function disposeTokenTrail(trail) {
   trail.line.geometry.dispose();
   trail.line.material.dispose();
 }
 
-function createBullet(scene, world, bulletTemplate, gun, bulletColliderHandleMap) {
-  const { muzzlePosition, muzzleDirection } = getGunMuzzleWorldTransform(gun);
-  const bullet = bulletTemplate.model.clone(true);
-  const bulletRotation = new THREE.Quaternion().setFromUnitVectors(
-    gunForwardDirection,
-    muzzleDirection,
+function createToken(scene, world, tokenTemplate, launcher, tokenColliderHandleMap) {
+  const { launchPointPosition, launchPointDirection } = getLauncherLaunchPointWorldTransform(launcher);
+  const token = tokenTemplate.model.clone(true);
+  const tokenRotation = new THREE.Quaternion().setFromUnitVectors(
+    launcherForwardDirection,
+    launchPointDirection,
   );
-  bullet.name = 'physics-bullet';
-  bullet.position.copy(muzzlePosition);
-  bullet.quaternion.copy(bulletRotation);
-  scene.add(bullet);
+  token.name = 'physics-token';
+  token.position.copy(launchPointPosition);
+  token.quaternion.copy(tokenRotation);
+  scene.add(token);
 
-  const trail = createBulletTrail(muzzlePosition, muzzleDirection);
+  const trail = createTokenTrail(launchPointPosition, launchPointDirection);
   scene.add(trail.line);
 
-  const bulletBody = world.createRigidBody(
+  const tokenBody = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(muzzlePosition.x, muzzlePosition.y, muzzlePosition.z)
+      .setTranslation(launchPointPosition.x, launchPointPosition.y, launchPointPosition.z)
       .setRotation({
-        x: bulletRotation.x,
-        y: bulletRotation.y,
-        z: bulletRotation.z,
-        w: bulletRotation.w,
+        x: tokenRotation.x,
+        y: tokenRotation.y,
+        z: tokenRotation.z,
+        w: tokenRotation.w,
       })
       .setCcdEnabled(true)
       .setLinearDamping(0.02)
       .setAngularDamping(0.2),
   );
-  bulletBody.setLinvel(
+  tokenBody.setLinvel(
     {
-      x: muzzleDirection.x * bulletSpeed,
-      y: muzzleDirection.y * bulletSpeed,
-      z: muzzleDirection.z * bulletSpeed,
+      x: launchPointDirection.x * tokenSpeed,
+      y: launchPointDirection.y * tokenSpeed,
+      z: launchPointDirection.z * tokenSpeed,
     },
     true,
   );
 
   const collider = world.createCollider(
-    RAPIER.ColliderDesc.ball(bulletTemplate.radius)
+    RAPIER.ColliderDesc.ball(tokenTemplate.radius)
       .setRestitution(0.1)
-      .setCollisionGroups(bulletCollisionGroup),
-    bulletBody,
+      .setCollisionGroups(tokenCollisionGroup),
+    tokenBody,
   );
   collider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
   collider.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
 
-  const createdBullet = {
-    mesh: bullet,
-    body: bulletBody,
+  const createdToken = {
+    mesh: token,
+    body: tokenBody,
     collider,
     trail,
     age: 0,
   };
 
-  bulletColliderHandleMap.set(collider.handle, createdBullet);
+  tokenColliderHandleMap.set(collider.handle, createdToken);
 
-  return createdBullet;
+  return createdToken;
 }
 
-function syncBulletMeshes(bullets) {
-  bullets.forEach((bullet) => {
-    const position = bullet.body.translation();
-    const rotation = bullet.body.rotation();
+function syncTokenMeshes(tokens) {
+  tokens.forEach((token) => {
+    const position = token.body.translation();
+    const rotation = token.body.rotation();
 
-    bullet.mesh.position.set(position.x, position.y, position.z);
-    bullet.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
-    updateBulletTrail(bullet);
+    token.mesh.position.set(position.x, position.y, position.z);
+    token.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+    updateTokenTrail(token);
   });
 }
 
-function removeBullet(scene, world, bullet, bulletColliderHandleMap = null) {
-  bulletColliderHandleMap?.delete(bullet.collider.handle);
-  scene.remove(bullet.mesh);
-  scene.remove(bullet.trail.line);
-  disposeBulletTrail(bullet.trail);
-  world.removeRigidBody(bullet.body);
+function removeToken(scene, world, token, tokenColliderHandleMap = null) {
+  tokenColliderHandleMap?.delete(token.collider.handle);
+  scene.remove(token.mesh);
+  scene.remove(token.trail.line);
+  disposeTokenTrail(token.trail);
+  world.removeRigidBody(token.body);
 }
 
-function pruneBullets(scene, world, bullets, delta, bulletColliderHandleMap) {
-  for (let index = bullets.length - 1; index >= 0; index -= 1) {
-    const bullet = bullets[index];
-    bullet.age += delta;
+function pruneTokens(scene, world, tokens, delta, tokenColliderHandleMap) {
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    const token = tokens[index];
+    token.age += delta;
 
-    if (bullet.age > bulletLifetime || bullet.mesh.position.y < -4) {
-      removeBullet(scene, world, bullet, bulletColliderHandleMap);
-      bullets.splice(index, 1);
+    if (token.age > tokenLifetime || token.mesh.position.y < -4) {
+      removeToken(scene, world, token, tokenColliderHandleMap);
+      tokens.splice(index, 1);
     }
   }
 
-  while (bullets.length > maxActiveBullets) {
-    const bullet = bullets.shift();
-    removeBullet(scene, world, bullet, bulletColliderHandleMap);
+  while (tokens.length > maxActiveTokens) {
+    const token = tokens.shift();
+    removeToken(scene, world, token, tokenColliderHandleMap);
   }
 }
 
@@ -1205,7 +1205,7 @@ function createPrize(scene, world, prizeType, slot, prizeColliderHandleMap = nul
   return createdPrize;
 }
 
-function activatePrizePhysics(prize, bullet = null) {
+function activatePrizePhysics(prize, token = null) {
   if (!prize || prize.isDynamic) {
     return;
   }
@@ -1216,12 +1216,12 @@ function activatePrizePhysics(prize, bullet = null) {
   prize.prizeBody.wakeUp();
   prize.isDynamic = true;
 
-  if (bullet) {
-    const bulletVelocity = bullet.body.linvel();
+  if (token) {
+    const tokenVelocity = token.body.linvel();
     prize.prizeBody.setLinvel({
-      x: bulletVelocity.x * prizeHitVelocityMultiplier,
-      y: bulletVelocity.y * prizeHitVelocityMultiplier,
-      z: bulletVelocity.z * prizeHitVelocityMultiplier,
+      x: tokenVelocity.x * prizeHitVelocityMultiplier,
+      y: tokenVelocity.y * prizeHitVelocityMultiplier,
+      z: tokenVelocity.z * prizeHitVelocityMultiplier,
     }, true);
   }
 }
@@ -1503,7 +1503,7 @@ function checkDroppedPrizes(
 
 function handleCollisionEvents(
   eventQueue,
-  bulletColliderHandleMap,
+  tokenColliderHandleMap,
   prizeColliderHandleMap,
 ) {
   eventQueue.drainCollisionEvents((handle1, handle2, started) => {
@@ -1512,10 +1512,10 @@ function handleCollisionEvents(
     }
 
     const prize = prizeColliderHandleMap.get(handle1) ?? prizeColliderHandleMap.get(handle2);
-    const bullet = bulletColliderHandleMap.get(handle1) ?? bulletColliderHandleMap.get(handle2);
+    const token = tokenColliderHandleMap.get(handle1) ?? tokenColliderHandleMap.get(handle2);
 
-    if (prize && bullet) {
-      activatePrizePhysics(prize, bullet);
+    if (prize && token) {
+      activatePrizePhysics(prize, token);
     }
   });
 }
@@ -1576,7 +1576,7 @@ function setupRingUi() {
     image: ringImage,
     traceArea: ringTraceArea,
     aimDirection,
-    aimLimits: gunAimLimits,
+    aimLimits: launcherAimLimits,
     tracedPoints,
     syncTraceArea: syncWhenReady,
     needsRender: true,
@@ -1633,27 +1633,27 @@ function setupRingUi() {
   return ringState;
 }
 
-function applyGunAim(gun, aimDirection) {
-  const yawOffset = aimDirection.x * gunAimLimits.maxYaw;
-  const pitchOffset = -aimDirection.y * gunAimLimits.maxPitch;
+function applyLauncherAim(launcher, aimDirection) {
+  const yawOffset = aimDirection.x * launcherAimLimits.maxYaw;
+  const pitchOffset = -aimDirection.y * launcherAimLimits.maxPitch;
 
-  gun.gun.rotation.set(
-    gunViewRotation.x + pitchOffset,
-    gunViewRotation.y + yawOffset,
-    gunViewRotation.z,
+  launcher.launcher.rotation.set(
+    launcherViewRotation.x + pitchOffset,
+    launcherViewRotation.y + yawOffset,
+    launcherViewRotation.z,
   );
 }
 
-function createShootCooldown() {
+function createActionCooldown() {
   return {
-    duration: shootCooldownDuration,
+    duration: actionCooldownDuration,
     remaining: 0,
     lastGaugeProgress: null,
     lastButtonDisabled: null,
   };
 }
 
-function isShootCoolingDown(cooldown) {
+function isActionCoolingDown(cooldown) {
   return cooldown.remaining > 0;
 }
 
@@ -1676,22 +1676,22 @@ function updateCooldownGauge(cooldown, { animate = true } = {}) {
     cooldownGaugeFill.style.transition = '';
   }
 
-  const isDisabled = isShootCoolingDown(cooldown);
+  const isDisabled = isActionCoolingDown(cooldown);
 
   if (cooldown.lastButtonDisabled !== isDisabled) {
-    shootButton.disabled = isDisabled;
-    shootButton.setAttribute('aria-disabled', String(isDisabled));
+    actionButton.disabled = isDisabled;
+    actionButton.setAttribute('aria-disabled', String(isDisabled));
     cooldown.lastButtonDisabled = isDisabled;
   }
 }
 
-function startShootCooldown(cooldown) {
+function startActionCooldown(cooldown) {
   cooldown.remaining = cooldown.duration;
   updateCooldownGauge(cooldown, { animate: false });
 }
 
-function tickShootCooldown(cooldown, delta) {
-  if (!isShootCoolingDown(cooldown)) {
+function tickActionCooldown(cooldown, delta) {
+  if (!isActionCoolingDown(cooldown)) {
     updateCooldownGauge(cooldown);
     return;
   }
@@ -1719,20 +1719,20 @@ async function init() {
   const wall = await loadWall(scene, world);
   const shelf = await loadShelf(scene, world, wall.wallBox);
   const prizeTypes = await loadPrizeTypes();
-  const bulletColliderHandleMap = new Map();
+  const tokenColliderHandleMap = new Map();
   const prizeColliderHandleMap = new Map();
   const prizes = fillInitialPrizeSlots(scene, world, prizeTypes, prizeColliderHandleMap);
   const tent = await loadTent(scene, world);
   const trees = await loadTrees(scene);
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
-  const gun = await loadGun(camera);
-  const bulletTemplate = await loadBulletTemplate();
+  const launcher = await loadLauncher(camera);
+  const tokenTemplate = await loadTokenTemplate();
   const pointTexture = await loadPointTexture();
-  const gunshotSound = createGunshotSound();
-  const shootCooldown = createShootCooldown();
-  updateCooldownGauge(shootCooldown);
-  const bullets = [];
+  const popSound = createPopSound();
+  const actionCooldown = createActionCooldown();
+  updateCooldownGauge(actionCooldown);
+  const tokens = [];
   const pointPopups = [];
   const scoreState = createScoreState();
   const prizeRespawnQueue = createPrizeRespawnQueue();
@@ -1748,33 +1748,33 @@ async function init() {
   window.addEventListener('resize', onResize);
   window.visualViewport?.addEventListener('resize', onResize);
 
-  shootButton.addEventListener('click', () => {
-    if (isShootCoolingDown(shootCooldown)) {
+  actionButton.addEventListener('click', () => {
+    if (isActionCoolingDown(actionCooldown)) {
       return;
     }
 
-    applyGunAim(gun, ring.aimDirection);
-    playGunshotSound(gunshotSound);
-    bullets.push(createBullet(
+    applyLauncherAim(launcher, ring.aimDirection);
+    playPopSound(popSound);
+    tokens.push(createToken(
       scene,
       world,
-      bulletTemplate,
-      gun,
-      bulletColliderHandleMap,
+      tokenTemplate,
+      launcher,
+      tokenColliderHandleMap,
     ));
-    startShootCooldown(shootCooldown);
+    startActionCooldown(actionCooldown);
   });
 
   function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
-    const hasPhysicsWork = hasActiveBullets(bullets) || hasAwakeDynamicPrizes(prizes);
-    let shouldRender = hasPendingVisualWork(bullets, prizes, ring);
+    const hasPhysicsWork = hasActiveTokens(tokens) || hasAwakeDynamicPrizes(prizes);
+    let shouldRender = hasPendingVisualWork(tokens, prizes, ring);
 
     if (hasPhysicsWork) {
       world.timestep = delta;
       world.step(eventQueue);
-      handleCollisionEvents(eventQueue, bulletColliderHandleMap, prizeColliderHandleMap);
-      syncBulletMeshes(bullets);
+      handleCollisionEvents(eventQueue, tokenColliderHandleMap, prizeColliderHandleMap);
+      syncTokenMeshes(tokens);
       checkDroppedPrizes(
         scene,
         world,
@@ -1785,7 +1785,7 @@ async function init() {
         prizePool,
       );
       syncPrizeMeshes(prizes);
-      pruneBullets(scene, world, bullets, delta, bulletColliderHandleMap);
+      pruneTokens(scene, world, tokens, delta, tokenColliderHandleMap);
       shouldRender = true;
     }
 
@@ -1803,11 +1803,11 @@ async function init() {
     }
 
     if (ring.needsRender) {
-      applyGunAim(gun, ring.aimDirection);
+      applyLauncherAim(launcher, ring.aimDirection);
     }
 
-    if (isShootCoolingDown(shootCooldown)) {
-      tickShootCooldown(shootCooldown, delta);
+    if (isActionCoolingDown(actionCooldown)) {
+      tickActionCooldown(actionCooldown, delta);
     }
 
     if (pointPopups.length > 0) {
@@ -1824,8 +1824,8 @@ async function init() {
 
   animate();
 
-  // 今後のゲーム初期化で使えるように、最小構成を公開しておく。
-  window.gameRuntime = {
+  // 今後の体験コンテンツ初期化で使えるように、最小構成を公開しておく。
+  window.boothRuntime = {
     THREE,
     RAPIER,
     scene,
@@ -1848,18 +1848,18 @@ async function init() {
     trees,
     treeConfigs,
     table,
-    gun,
-    bulletTemplate,
+    launcher,
+    tokenTemplate,
     pointTexture,
     pointPopups,
     scoreState,
-    gunshotSound,
-    shootCooldown,
-    bullets,
-    bulletColliderHandleMap,
+    popSound,
+    actionCooldown,
+    tokens,
+    tokenColliderHandleMap,
     prizeColliderHandleMap,
     ring,
-    aimLimits: gunAimLimits,
+    aimLimits: launcherAimLimits,
   };
 }
 
