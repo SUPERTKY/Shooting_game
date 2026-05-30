@@ -20,7 +20,12 @@ const treePaths = {
   tree1: './tree/tree_1.glb',
   tree2: './tree/tree_2.glb',
 };
-const maxPrizeCount = 10;
+// 学校PC向けの低負荷モード。見た目を増やしたい場合は各値を調整する。
+const maxPrizeCount = 6;
+const enabledPrizeTypeIds = [4, 8, 10];
+const loadDecorativeTrees = false;
+const useSimpleGround = true;
+const enableFillLight = false;
 const defaultPrizeSize = 0.15;
 const defaultPrizeSlotSizeScale = 1;
 const defaultPrizeHeightOffset = 0;
@@ -60,6 +65,7 @@ const tentPosition = new THREE.Vector3(0, 0, -2);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
 const groundViewMaxSize = 16;
+const simpleGroundDepth = 0.1;
 const groundPosition = new THREE.Vector3(0, 0, 0);
 const treeViewMaxSize = 2.4;
 const createTreeConfig = (id, path, position, rotationY = 0) => ({
@@ -126,14 +132,12 @@ const prizeHeightOffsetByTypeId = {
   9: -0.1,
   10: -0.12,
 };
-const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
-  const id = index + 1;
-
-  return createPrizeTypeConfig(id, {
+const prizeTypeConfigs = enabledPrizeTypeIds.map((id) => (
+  createPrizeTypeConfig(id, {
     size: prizeSizeByTypeId[id] ?? defaultPrizeSize,
     heightOffset: prizeHeightOffsetByTypeId[id] ?? defaultPrizeHeightOffset,
-  });
-});
+  })
+));
 // sizeScale は配置スロットごとの倍率です。
 // 同じ景品タイプでも置き場所ごとに大きさを変えたい場合に指定します。
 const prizeSlotConfigs = [
@@ -152,7 +156,11 @@ const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const prizeHitVelocityMultiplier = 0.16;
 const prizeDropScoreHeight = 0.3;
-const maxRendererPixelRatio = 0.75;
+const maxRendererPixelRatio = 0.5;
+// 低性能な学校PCでも安定しやすいよう、描画と物理更新を24fpsに抑える。
+const targetFrameRate = 24;
+const targetFrameDuration = 1000 / targetFrameRate;
+const maxFrameDelta = 0.05;
 const enableRealtimeShadows = false;
 const textureAnisotropy = 1;
 const pointPopupLifetime = 0.85;
@@ -206,7 +214,6 @@ const tentCollisionGroup = createCollisionGroup(
   collisionGroups.tent,
   collisionGroups.token,
 );
-const clock = new THREE.Clock();
 const prizeBottomMatrix = new THREE.Matrix4();
 const prizeBottomPosition = new THREE.Vector3();
 const prizeBottomQuaternion = new THREE.Quaternion();
@@ -363,14 +370,60 @@ function addLights(scene) {
   keyLight.castShadow = enableRealtimeShadows;
   scene.add(keyLight);
 
-  const fillLight = new THREE.PointLight(0x80bfff, 25, 12);
-  fillLight.position.set(-3, 2.5, 3);
-  scene.add(fillLight);
+  const fillLight = enableFillLight
+    ? new THREE.PointLight(0x80bfff, 25, 12)
+    : null;
+
+  if (fillLight) {
+    fillLight.position.set(-3, 2.5, 3);
+    scene.add(fillLight);
+  }
 
   return { ambientLight, keyLight, fillLight };
 }
 
+function createSimpleGround(scene, world) {
+  const groundGeometry = new THREE.PlaneGeometry(groundViewMaxSize, groundViewMaxSize);
+  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x6f9149 });
+  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+  ground.name = 'simple-visual-ground';
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.copy(groundPosition);
+  ground.receiveShadow = false;
+  scene.add(ground);
+  freezeStaticObjectMatrices(ground);
+
+  const groundBody = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(
+      groundPosition.x,
+      groundPosition.y - simpleGroundDepth / 2,
+      groundPosition.z,
+    ),
+  );
+  const groundCollider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(
+      groundViewMaxSize / 2,
+      simpleGroundDepth / 2,
+      groundViewMaxSize / 2,
+    ).setCollisionGroups(environmentCollisionGroup),
+    groundBody,
+  );
+  groundCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+
+  return {
+    ground,
+    groundScale: 1,
+    groundBody,
+    groundCollider,
+    groundColliders: [groundCollider],
+  };
+}
+
 async function loadGround(scene, world) {
+  if (useSimpleGround) {
+    return createSimpleGround(scene, world);
+  }
+
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(groundPath);
   const ground = gltf.scene;
@@ -1723,7 +1776,7 @@ async function init() {
   const prizeColliderHandleMap = new Map();
   const prizes = fillInitialPrizeSlots(scene, world, prizeTypes, prizeColliderHandleMap);
   const tent = await loadTent(scene, world);
-  const trees = await loadTrees(scene);
+  const trees = loadDecorativeTrees ? await loadTrees(scene) : [];
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
   const launcher = await loadLauncher(camera);
@@ -1765,8 +1818,25 @@ async function init() {
     startActionCooldown(actionCooldown);
   });
 
-  function animate() {
-    const delta = Math.min(clock.getDelta(), 0.05);
+  let previousFrameTime = null;
+
+  function animate(timestamp) {
+    requestAnimationFrame(animate);
+
+    if (previousFrameTime === null) {
+      previousFrameTime = timestamp - targetFrameDuration;
+    }
+
+    const elapsed = timestamp - previousFrameTime;
+
+    if (elapsed < targetFrameDuration) {
+      return;
+    }
+
+    // 余った時間を次のフレームへ繰り越し、端末ごとの差が出にくい更新頻度を保つ。
+    previousFrameTime = timestamp - (elapsed % targetFrameDuration);
+
+    const delta = Math.min(elapsed / 1000, maxFrameDelta);
     const hasPhysicsWork = hasActiveTokens(tokens) || hasAwakeDynamicPrizes(prizes);
     let shouldRender = hasPendingVisualWork(tokens, prizes, ring);
 
@@ -1819,10 +1889,9 @@ async function init() {
       ring.needsRender = false;
     }
 
-    requestAnimationFrame(animate);
   }
 
-  animate();
+  requestAnimationFrame(animate);
 
   // 今後の体験コンテンツ初期化で使えるように、最小構成を公開しておく。
   window.boothRuntime = {
