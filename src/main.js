@@ -215,6 +215,33 @@ const prizeBottomQuaternion = new THREE.Quaternion();
 const prizeBottomScale = new THREE.Vector3(1, 1, 1);
 const prizeBottomCorner = new THREE.Vector3();
 
+function getViewportSize() {
+  const visualViewport = window.visualViewport;
+  const viewportWidth = visualViewport?.width
+    ?? window.innerWidth
+    ?? document.documentElement.clientWidth
+    ?? 1;
+  const viewportHeight = visualViewport?.height
+    ?? window.innerHeight
+    ?? document.documentElement.clientHeight
+    ?? 1;
+  const width = Math.max(Math.round(viewportWidth), 1);
+  const height = Math.max(Math.round(viewportHeight), 1);
+
+  return { width, height };
+}
+
+function getViewportAspect() {
+  const { width, height } = getViewportSize();
+
+  return width / height;
+}
+
+function setRendererViewport(renderer) {
+  const { width, height } = getViewportSize();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxRendererPixelRatio));
+  renderer.setSize(width, height);
+}
 
 function createCollisionGroup(memberships, filters) {
   return (memberships << 16) | filters;
@@ -223,11 +250,10 @@ function createCollisionGroup(memberships, filters) {
 function createRenderer() {
   const renderer = new THREE.WebGLRenderer({
     antialias: false,
-    powerPreference: 'high-performance',
+    powerPreference: 'default',
     stencil: false,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxRendererPixelRatio));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  setRendererViewport(renderer);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -240,7 +266,7 @@ function createRenderer() {
 function createCamera() {
   const camera = new THREE.PerspectiveCamera(
     60,
-    window.innerWidth / window.innerHeight,
+    getViewportAspect(),
     0.1,
     100,
   );
@@ -431,10 +457,22 @@ async function loadTable(camera) {
   return { table, tableModel };
 }
 
-async function loadTree(scene, config, loader) {
-  const gltf = await loader.loadAsync(config.path);
-  const treeModel = gltf.scene;
-  optimizeModelTextureMemory(treeModel);
+async function loadTreeTemplate(path, loader, templateCache) {
+  if (templateCache.has(path)) {
+    return templateCache.get(path);
+  }
+
+  const gltf = await loader.loadAsync(path);
+  const treeTemplate = gltf.scene;
+  optimizeModelTextureMemory(treeTemplate);
+  templateCache.set(path, treeTemplate);
+
+  return treeTemplate;
+}
+
+async function loadTree(scene, config, loader, templateCache) {
+  const treeTemplate = await loadTreeTemplate(config.path, loader, templateCache);
+  const treeModel = treeTemplate.clone(true);
   const tree = new THREE.Group();
   tree.name = `decorative-${config.id}`;
 
@@ -469,9 +507,12 @@ async function loadTree(scene, config, loader) {
 
 async function loadTrees(scene) {
   const loader = new GLTFLoader();
-  const loadedTrees = await Promise.all(
-    treeConfigs.map((config) => loadTree(scene, config, loader)),
-  );
+  const templateCache = new Map();
+  const loadedTrees = [];
+
+  for (const config of treeConfigs) {
+    loadedTrees.push(await loadTree(scene, config, loader, templateCache));
+  }
 
   return loadedTrees;
 }
@@ -1065,11 +1106,17 @@ async function loadPrizeType(config, loader) {
 
 async function loadPrizeTypes() {
   const loader = new GLTFLoader();
-  const loadedPrizeTypes = await Promise.all(
-    prizeTypeConfigs.map((config) => loadPrizeType(config, loader)),
-  );
+  const loadedPrizeTypes = [];
 
-  return loadedPrizeTypes.filter(Boolean);
+  for (const config of prizeTypeConfigs) {
+    const prizeType = await loadPrizeType(config, loader);
+
+    if (prizeType) {
+      loadedPrizeTypes.push(prizeType);
+    }
+  }
+
+  return loadedPrizeTypes;
 }
 
 function getRandomArrayItem(items) {
@@ -1320,10 +1367,11 @@ function createScoreState() {
 }
 
 function getRandomScreenPosition() {
-  const minX = Math.min(pointPopupScreenPadding, window.innerWidth / 2);
-  const minY = Math.min(pointPopupScreenPadding, window.innerHeight / 2);
-  const maxX = Math.max(window.innerWidth - minX, minX);
-  const maxY = Math.max(window.innerHeight - minY, minY);
+  const { width, height } = getViewportSize();
+  const minX = Math.min(pointPopupScreenPadding, width / 2);
+  const minY = Math.min(pointPopupScreenPadding, height / 2);
+  const maxX = Math.max(width - minX, minX);
+  const maxY = Math.max(height - minY, minY);
 
   return {
     x: THREE.MathUtils.randFloat(minX, maxX),
@@ -1638,14 +1686,14 @@ async function init() {
   status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = getViewportAspect();
     camera.updateProjectionMatrix();
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxRendererPixelRatio));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    setRendererViewport(renderer);
     renderer.shadowMap.needsUpdate = true;
   }
 
   window.addEventListener('resize', onResize);
+  window.visualViewport?.addEventListener('resize', onResize);
 
   shootButton.addEventListener('click', () => {
     if (isShootCoolingDown(shootCooldown)) {
