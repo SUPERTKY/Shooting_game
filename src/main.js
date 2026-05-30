@@ -20,10 +20,12 @@ const treePaths = {
   tree1: './tree/tree_1.glb',
   tree2: './tree/tree_2.glb',
 };
-const maxPrizeCount = 10;
-// 軽量なモデルを標準で使い、初期ロードとGPUメモリ使用量を抑える。
-// 景品を増やしたい場合は Prize_1.glb から Prize_10.glb までの番号を追加できる。
-const enabledPrizeTypeIds = [3, 4, 6, 8, 10];
+// 学校PC向けの低負荷モード。見た目を増やしたい場合は各値を調整する。
+const maxPrizeCount = 6;
+const enabledPrizeTypeIds = [4, 8, 10];
+const loadDecorativeTrees = false;
+const useSimpleGround = true;
+const enableFillLight = false;
 const defaultPrizeSize = 0.15;
 const defaultPrizeSlotSizeScale = 1;
 const defaultPrizeHeightOffset = 0;
@@ -63,6 +65,7 @@ const tentPosition = new THREE.Vector3(0, 0, -2);
 const tentRotation = new THREE.Euler(0, 0, 0);
 const tentViewMaxSize = 2;
 const groundViewMaxSize = 16;
+const simpleGroundDepth = 0.1;
 const groundPosition = new THREE.Vector3(0, 0, 0);
 const treeViewMaxSize = 2.4;
 const createTreeConfig = (id, path, position, rotationY = 0) => ({
@@ -153,9 +156,9 @@ const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const prizeHitVelocityMultiplier = 0.16;
 const prizeDropScoreHeight = 0.3;
-const maxRendererPixelRatio = 0.75;
-// 低性能な学校PCでも安定しやすいよう、描画と物理更新を30fpsに抑える。
-const targetFrameRate = 30;
+const maxRendererPixelRatio = 0.5;
+// 低性能な学校PCでも安定しやすいよう、描画と物理更新を24fpsに抑える。
+const targetFrameRate = 24;
 const targetFrameDuration = 1000 / targetFrameRate;
 const maxFrameDelta = 0.05;
 const enableRealtimeShadows = false;
@@ -367,14 +370,60 @@ function addLights(scene) {
   keyLight.castShadow = enableRealtimeShadows;
   scene.add(keyLight);
 
-  const fillLight = new THREE.PointLight(0x80bfff, 25, 12);
-  fillLight.position.set(-3, 2.5, 3);
-  scene.add(fillLight);
+  const fillLight = enableFillLight
+    ? new THREE.PointLight(0x80bfff, 25, 12)
+    : null;
+
+  if (fillLight) {
+    fillLight.position.set(-3, 2.5, 3);
+    scene.add(fillLight);
+  }
 
   return { ambientLight, keyLight, fillLight };
 }
 
+function createSimpleGround(scene, world) {
+  const groundGeometry = new THREE.PlaneGeometry(groundViewMaxSize, groundViewMaxSize);
+  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x6f9149 });
+  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+  ground.name = 'simple-visual-ground';
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.copy(groundPosition);
+  ground.receiveShadow = false;
+  scene.add(ground);
+  freezeStaticObjectMatrices(ground);
+
+  const groundBody = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(
+      groundPosition.x,
+      groundPosition.y - simpleGroundDepth / 2,
+      groundPosition.z,
+    ),
+  );
+  const groundCollider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(
+      groundViewMaxSize / 2,
+      simpleGroundDepth / 2,
+      groundViewMaxSize / 2,
+    ).setCollisionGroups(environmentCollisionGroup),
+    groundBody,
+  );
+  groundCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+
+  return {
+    ground,
+    groundScale: 1,
+    groundBody,
+    groundCollider,
+    groundColliders: [groundCollider],
+  };
+}
+
 async function loadGround(scene, world) {
+  if (useSimpleGround) {
+    return createSimpleGround(scene, world);
+  }
+
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(groundPath);
   const ground = gltf.scene;
@@ -1727,7 +1776,7 @@ async function init() {
   const prizeColliderHandleMap = new Map();
   const prizes = fillInitialPrizeSlots(scene, world, prizeTypes, prizeColliderHandleMap);
   const tent = await loadTent(scene, world);
-  const trees = await loadTrees(scene);
+  const trees = loadDecorativeTrees ? await loadTrees(scene) : [];
   frameObjectInView(wall.wall, camera);
   const table = await loadTable(camera);
   const launcher = await loadLauncher(camera);
@@ -1784,7 +1833,7 @@ async function init() {
       return;
     }
 
-    // 余った時間を次のフレームへ繰り越し、端末ごとの差が出にくい30fpsを保つ。
+    // 余った時間を次のフレームへ繰り越し、端末ごとの差が出にくい更新頻度を保つ。
     previousFrameTime = timestamp - (elapsed % targetFrameDuration);
 
     const delta = Math.min(elapsed / 1000, maxFrameDelta);
