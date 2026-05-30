@@ -24,8 +24,8 @@ python3 -m http.server 8000
 
 ## ライブラリ
 
-- three.js は import map で CDN から読み込みます。
-- Rapier Physics (`@dimforge/rapier3d-compat`) は import map で CDN から読み込み、`RAPIER.init({})` で初期化します。
+- three.js は import map で cdnjs から読み込みます。
+- three.js のアドオンと Rapier Physics (`@dimforge/rapier3d-compat`) は import map で jsDelivr から読み込み、`RAPIER.init({})` で初期化します。
 
 ## ライセンス表記
 
@@ -35,3 +35,5 @@ python3 -m http.server 8000
 ## 学校PC・フィルタ対策メモ
 
 学校のフィルタで誤判定されにくいように、ページタイトルや公開されるアセット名は強い印象を与える表現を避け、縁日風の景品体験として表示しています。公開先のフォルダー名やURLにも同様の表現を入れないことをおすすめします。
+
+「Iフィルターに接続の安定性を確認できない」と表示される場合は、外部 CDN の一部が学校ネットワークで判定されている可能性があります。このため、three.js 本体は jsDelivr ではなく cdnjs から読み込む設定にしています。
