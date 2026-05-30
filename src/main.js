@@ -1,18 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { initializeApp } from 'firebase/app';
-import { firebaseConfig } from './firebaseConfig.js';
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getFirestore,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
 
 const status = document.querySelector('#status');
 const canvasContainer = document.querySelector('#game-canvas');
@@ -21,11 +9,6 @@ const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const shootButton = document.querySelector('#shoot-button');
 const cooldownGaugeFill = document.querySelector('#cooldown-gauge-fill');
-const startStreamButton = document.querySelector('#start-stream');
-const streamStatus = document.querySelector('#stream-status');
-const streamSessionId = 'booth-01';
-const firebaseApp = initializeApp(firebaseConfig);
-const firestoreDb = getFirestore(firebaseApp);
 const wallPath = './assets/wall.glb';
 const gunPath = './assets/gun.glb';
 const bulletPath = './assets/bullet.glb';
@@ -233,93 +216,6 @@ const prizeBottomScale = new THREE.Vector3(1, 1, 1);
 const prizeBottomCorner = new THREE.Vector3();
 
 
-function setStreamStatus(message) {
-  streamStatus.textContent = message;
-}
-
-async function startScreenStreamWithFirebase(renderer) {
-  const sessionId = streamSessionId;
-  const db = firestoreDb;
-
-  const sessionCreatedAt = Date.now();
-  const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
-    audio: false,
-  });
-
-  const peerConnection = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-  });
-
-  stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
-
-  const sessionRef = doc(db, 'screenShareSessions', sessionId);
-  const offerCandidatesRef = collection(sessionRef, 'offerCandidates');
-  const answerCandidatesRef = collection(sessionRef, 'answerCandidates');
-
-  peerConnection.onicecandidate = async (event) => {
-    if (event.candidate) {
-      await addDoc(offerCandidatesRef, {
-        ...event.candidate.toJSON(),
-        sessionCreatedAt,
-      });
-    }
-  };
-
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-  await setDoc(sessionRef, {
-    createdAt: sessionCreatedAt,
-    gameViewport: {
-      width: renderer.domElement.width,
-      height: renderer.domElement.height,
-    },
-    offer: {
-      type: offer.type,
-      sdp: offer.sdp,
-    },
-    status: 'waiting-answer',
-  });
-
-  onSnapshot(sessionRef, async (snapshot) => {
-    const data = snapshot.data();
-    if (!data?.answer || peerConnection.currentRemoteDescription) {
-      return;
-    }
-
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-    setStreamStatus(`接続完了: ${sessionId}`);
-    await updateDoc(sessionRef, { status: 'connected' });
-  });
-
-  onSnapshot(answerCandidatesRef, (snapshot) => {
-    snapshot.docChanges().forEach((change) => {
-      if (change.type !== 'added') {
-        return;
-      }
-
-      const { sessionCreatedAt: candidateSessionCreatedAt, ...candidate } = change.doc.data();
-      if (candidateSessionCreatedAt !== sessionCreatedAt) {
-        return;
-      }
-
-      peerConnection
-        .addIceCandidate(new RTCIceCandidate(candidate))
-        .catch((error) => setStreamStatus(`answer ICE candidate 追加失敗: ${error.message}`));
-    });
-  });
-
-  stream.getVideoTracks()[0]?.addEventListener('ended', async () => {
-    setStreamStatus('画面共有が終了しました。');
-    peerConnection.close();
-    const current = await getDoc(sessionRef);
-    if (current.exists()) {
-      await updateDoc(sessionRef, { status: 'ended' });
-    }
-  });
-
-  return { stream, peerConnection, sessionRef };
-}
 function createCollisionGroup(memberships, filters) {
   return (memberships << 16) | filters;
 }
@@ -1710,37 +1606,6 @@ async function init() {
   const world = new RAPIER.World(gravity);
   const eventQueue = new RAPIER.EventQueue(true);
   const renderer = createRenderer();
-  let activeStreamSession = null;
-  let isStartingStream = false;
-  startStreamButton.addEventListener('click', async () => {
-    if (isStartingStream) {
-      setStreamStatus('画面共有の許可ダイアログを確認してください。');
-      return;
-    }
-
-    if (activeStreamSession) {
-      setStreamStatus('すでに共有中です。停止はブラウザ共有UIから行ってください。');
-      return;
-    }
-
-    try {
-      isStartingStream = true;
-      startStreamButton.disabled = true;
-      setStreamStatus('画面共有の許可待ち...');
-      activeStreamSession = await startScreenStreamWithFirebase(renderer);
-      activeStreamSession.stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-        activeStreamSession = null;
-      });
-      setStreamStatus(`オファー作成完了: ${streamSessionId}`);
-    } catch (error) {
-      console.error(error);
-      setStreamStatus(`開始失敗: ${error.message}`);
-      activeStreamSession = null;
-    } finally {
-      isStartingStream = false;
-      startStreamButton.disabled = false;
-    }
-  });
   const camera = createCamera();
   scene.add(camera);
   const background = await configureBackground(scene);
