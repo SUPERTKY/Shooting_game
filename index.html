@@ -111,9 +111,9 @@
         transition: transform 0.05s linear;
       }
 
-      main,
       footer {
-        position: relative;
+        position: fixed;
+        bottom: 0;
         z-index: 1;
         width: fit-content;
         margin: 1rem;
@@ -121,19 +121,6 @@
         border-radius: 0.75rem;
         background: rgb(9 13 22 / 72%);
         backdrop-filter: blur(6px);
-      }
-
-      h1 {
-        margin-block: 0 0.5rem;
-      }
-
-      p {
-        margin: 0;
-      }
-
-      footer {
-        position: fixed;
-        bottom: 0;
       }
 
       a {
@@ -154,11 +141,6 @@
     <div id="cooldown-gauge" aria-label="ショットのクールダウン">
       <div id="cooldown-gauge-fill"></div>
     </div>
-    <main>
-      <h1>Shooting Game</h1>
-
-      <p id="status">three.js と Rapier Physics を読み込み中...</p>
-    </main>
     <footer>
       <small>
         Libraries: three.js (MIT License), Rapier Physics (Apache License 2.0).

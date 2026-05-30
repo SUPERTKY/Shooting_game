@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 
-const status = document.querySelector('#status');
 const canvasContainer = document.querySelector('#game-canvas');
 const ringUi = document.querySelector('#target-ring-ui');
 const ringImage = document.querySelector('#target-ring-image');
@@ -1715,7 +1714,6 @@ async function init() {
   const background = await configureBackground(scene);
   const lights = addLights(scene);
 
-  status.textContent = '地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、ポイント画像、UIリングを読み込み中...';
   const ring = setupRingUi();
   const ground = await loadGround(scene, world);
   const wall = await loadWall(scene, world);
@@ -1739,7 +1737,6 @@ async function init() {
   const scoreState = createScoreState();
   const prizeRespawnQueue = createPrizeRespawnQueue();
   const prizePool = createPrizePool();
-  status.textContent = `リングをドラッグして狙い、ショットボタンで銃口から弾を発射します。景品は${prizes.length}個、木は${trees.length}本読み込みました。`;
 
   function onResize() {
     camera.aspect = getViewportAspect();
@@ -1868,5 +1865,4 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  status.textContent = '背景画像、地面モデル、壁モデル、棚モデル、景品モデル、テントモデル、木モデル、テーブルモデル、銃モデル、弾モデル、ポイント画像、UIリング、またはライブラリの読み込みに失敗しました。';
 });
