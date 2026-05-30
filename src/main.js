@@ -1755,7 +1755,7 @@ function tickActionCooldown(cooldown, delta) {
 }
 
 async function init() {
-  await RAPIER.init({});
+  await RAPIER.init();
 
   const scene = new THREE.Scene();
 

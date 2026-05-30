@@ -31,7 +31,7 @@ python3 -m http.server 8000
 ## ライブラリ
 
 - three.js は import map で cdnjs から読み込みます。
-- three.js のアドオンと Rapier Physics (`@dimforge/rapier3d-compat`) は import map で jsDelivr から読み込み、`RAPIER.init({})` で初期化します。
+- three.js のアドオンと Rapier Physics (`@dimforge/rapier3d-compat`) は import map で jsDelivr から読み込み、`RAPIER.init()` で初期化します。
 
 ## ライセンス表記
 
