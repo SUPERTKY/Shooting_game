@@ -4,15 +4,29 @@
 
 ## 起動方法
 
-ローカルサーバーを立ち上げて `index.html` を開きます。
+最初に npm パッケージをインストールします。
 
 ```bash
-python3 -m http.server 8000
+npm install
 ```
 
-その後、ブラウザで <http://localhost:8000/> にアクセスしてください。
+開発中は Vite のローカルサーバーを起動します。
 
+```bash
+npm run dev
+```
 
+ターミナルに表示された URL にブラウザでアクセスしてください。
+
+## 発表用ファイルの作成
+
+学校PCでの発表前に、次のコマンドで `dist/` を生成してください。
+
+```bash
+npm run build
+```
+
+生成された `dist/` には、ビルド済み JavaScript とゲームで使うモデル・画像・音声が入ります。発表時はソースコード側ではなく `dist/` の内容をローカルサーバーや公開先へ配置してください。起動時に外部 CDN から JavaScript ライブラリを取得する必要はありません。
 
 ## 景品サイズの設定
 
@@ -30,8 +44,8 @@ python3 -m http.server 8000
 
 ## ライブラリ
 
-- three.js は import map で cdnjs から読み込みます。
-- three.js のアドオンと Rapier Physics (`@dimforge/rapier3d-compat`) は import map で jsDelivr から読み込み、`RAPIER.init({})` で初期化します。
+- three.js、three.js のアドオン、Rapier Physics (`@dimforge/rapier3d-compat`) は npm パッケージとして管理し、Vite でローカルにビルドします。
+- Rapier Physics は `RAPIER.init()` で初期化します。
 
 ## ライセンス表記
 
@@ -42,4 +56,4 @@ python3 -m http.server 8000
 
 学校のフィルタで誤判定されにくいように、ページタイトルや公開されるアセット名は強い印象を与える表現を避け、縁日風の景品体験として表示しています。公開先のフォルダー名やURLにも同様の表現を入れないことをおすすめします。
 
-「Iフィルターに接続の安定性を確認できない」と表示される場合は、外部 CDN の一部が学校ネットワークで判定されている可能性があります。このため、three.js 本体は jsDelivr ではなく cdnjs から読み込む設定にしています。
+「Iフィルターに接続の安定性を確認できない」と表示される環境に備え、発表用の `dist/` は起動時に外部 CDN から JavaScript ライブラリを取得しない構成にしています。Rapier Physics は WebAssembly を利用するため、`dist/` でもブロックされる場合は学校PC側で WebAssembly 自体が許可されているか管理者へ確認してください。
