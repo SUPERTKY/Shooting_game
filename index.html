@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Shooting Game</title>
+    <meta name="description" content="学校発表向けの縁日風3D景品体験です。" />
+    <title>School Fair Prize Booth</title>
     <script type="importmap">
       {
         "imports": {
@@ -24,7 +25,7 @@
         font-family: system-ui, sans-serif;
       }
 
-      #game-canvas {
+      #booth-canvas {
         position: fixed;
         inset: 0;
       }
@@ -56,7 +57,7 @@
         cursor: crosshair;
       }
 
-      #shoot-button {
+      #action-button {
         position: fixed;
         top: calc(50% + 16vh);
         left: calc(50% - 16vw);
@@ -70,17 +71,17 @@
         user-select: none;
       }
 
-      #shoot-button:disabled {
+      #action-button:disabled {
         cursor: not-allowed;
         opacity: 0.72;
       }
 
-      #shoot-button:focus-visible {
+      #action-button:focus-visible {
         outline: 3px solid #9bd1ff;
         outline-offset: 0.35rem;
       }
 
-      #shoot-button-image {
+      #action-button-image {
         display: block;
         width: 100%;
         height: auto;
@@ -130,15 +131,15 @@
     </style>
   </head>
   <body>
-    <div id="game-canvas" aria-label="3D game view"></div>
+    <div id="booth-canvas" aria-label="3D school fair booth view"></div>
     <div id="target-ring-ui" aria-label="リングのなぞれる場所">
       <img id="target-ring-image" src="./image/ring.png" alt="Target ring" draggable="false" />
       <div id="target-ring-trace-area" aria-label="リングの当たり判定"></div>
     </div>
-    <button id="shoot-button" type="button" aria-label="撃つ">
-      <img id="shoot-button-image" src="./image/shoot.png" alt="" draggable="false" />
+    <button id="action-button" type="button" aria-label="チャレンジ">
+      <img id="action-button-image" src="./image/action.png" alt="" draggable="false" />
     </button>
-    <div id="cooldown-gauge" aria-label="ショットのクールダウン">
+    <div id="cooldown-gauge" aria-label="チャレンジの待ち時間">
       <div id="cooldown-gauge-fill"></div>
     </div>
     <footer>
