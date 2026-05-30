@@ -153,9 +153,8 @@ const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const prizeHitVelocityMultiplier = 0.16;
 const prizeDropScoreHeight = 0.3;
-const maxRendererPixelRatio = 1;
-const shadowMapSize = 512;
-const shadowUpdateInterval = 4;
+const maxRendererPixelRatio = 0.75;
+const enableRealtimeShadows = false;
 const textureAnisotropy = 1;
 const pointPopupLifetime = 0.85;
 const pointPopupSize = 'min(28vmin, 190px)';
@@ -250,13 +249,12 @@ function createCollisionGroup(memberships, filters) {
 function createRenderer() {
   const renderer = new THREE.WebGLRenderer({
     antialias: false,
-    powerPreference: 'default',
+    powerPreference: 'high-performance',
     stencil: false,
   });
   setRendererViewport(renderer);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = enableRealtimeShadows;
   renderer.shadowMap.autoUpdate = false;
   canvasContainer.appendChild(renderer.domElement);
 
@@ -274,6 +272,36 @@ function createCamera() {
   camera.lookAt(0, 1.4, 0);
 
   return camera;
+}
+
+
+function freezeStaticObjectMatrices(object) {
+  object.updateMatrixWorld(true);
+  object.traverse((child) => {
+    child.matrixAutoUpdate = false;
+  });
+}
+
+function hasActiveBullets(bullets) {
+  return bullets.length > 0;
+}
+
+function hasAwakeDynamicPrizes(prizes) {
+  return prizes.some((prize) => {
+    if (!prize.isDynamic) {
+      return false;
+    }
+
+    return typeof prize.prizeBody.isSleeping === 'function'
+      ? !prize.prizeBody.isSleeping()
+      : true;
+  });
+}
+
+function hasPendingVisualWork(bullets, prizes, ring) {
+  return hasActiveBullets(bullets)
+    || hasAwakeDynamicPrizes(prizes)
+    || ring.needsRender;
 }
 
 function optimizeTextureMemory(texture, {
@@ -333,14 +361,7 @@ function addLights(scene) {
 
   const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
   keyLight.position.set(4, 6, -4);
-  keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(shadowMapSize, shadowMapSize);
-  keyLight.shadow.camera.near = 0.5;
-  keyLight.shadow.camera.far = 30;
-  keyLight.shadow.camera.left = -8;
-  keyLight.shadow.camera.right = 8;
-  keyLight.shadow.camera.top = 8;
-  keyLight.shadow.camera.bottom = -8;
+  keyLight.castShadow = enableRealtimeShadows;
   scene.add(keyLight);
 
   const fillLight = new THREE.PointLight(0x80bfff, 25, 12);
@@ -374,7 +395,7 @@ async function loadGround(scene, world) {
   ground.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = false;
-      child.receiveShadow = true;
+      child.receiveShadow = enableRealtimeShadows;
     }
   });
 
@@ -386,6 +407,7 @@ async function loadGround(scene, world) {
     ground,
   );
   const groundCollider = groundColliders[0] ?? null;
+  freezeStaticObjectMatrices(ground);
 
   return { ground, groundScale, groundBody, groundCollider, groundColliders };
 }
@@ -446,13 +468,14 @@ async function loadTable(camera) {
 
   table.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = enableRealtimeShadows;
+      child.receiveShadow = enableRealtimeShadows;
     }
   });
 
   camera.add(table);
   keepCameraChildLevelWithWorld(table, camera, tableViewQuaternion);
+  freezeStaticObjectMatrices(table);
 
   return { table, tableModel };
 }
@@ -495,12 +518,13 @@ async function loadTree(scene, config, loader, templateCache) {
 
   tree.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = enableRealtimeShadows;
+      child.receiveShadow = enableRealtimeShadows;
     }
   });
 
   scene.add(tree);
+  freezeStaticObjectMatrices(tree);
 
   return { config, tree, treeModel, treeScale };
 }
@@ -541,8 +565,8 @@ async function loadTent(scene, world) {
 
   tent.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = enableRealtimeShadows;
+      child.receiveShadow = enableRealtimeShadows;
     }
   });
 
@@ -554,6 +578,7 @@ async function loadTent(scene, world) {
     tent,
     tentCollisionGroup,
   );
+  freezeStaticObjectMatrices(tent);
 
   return { tent, tentScale, tentBody, tentColliders };
 }
@@ -581,8 +606,8 @@ async function loadGun(camera) {
 
   gun.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = enableRealtimeShadows;
+      child.receiveShadow = enableRealtimeShadows;
     }
   });
 
@@ -696,8 +721,6 @@ function updateTrailGeometry(trail, trailPositions, trailPositionBuffer) {
       new THREE.BufferAttribute(trailPositionBuffer, 3),
     );
   }
-
-  trail.geometry.computeBoundingSphere();
 }
 
 function updateBulletTrail(bullet) {
@@ -936,8 +959,8 @@ async function loadWall(scene, world) {
 
   wall.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = enableRealtimeShadows;
+      child.receiveShadow = enableRealtimeShadows;
     }
   });
 
@@ -957,6 +980,7 @@ async function loadWall(scene, world) {
     wallBody,
   );
   wallCollider.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.ALL);
+  freezeStaticObjectMatrices(wall);
 
   return { wall, wallBody, wallCollider, wallBox };
 }
@@ -984,8 +1008,8 @@ async function loadShelf(scene, world, wallBox) {
 
   shelf.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = enableRealtimeShadows;
+      child.receiveShadow = enableRealtimeShadows;
     }
   });
 
@@ -997,6 +1021,7 @@ async function loadShelf(scene, world, wallBox) {
     world,
     shelf,
   );
+  freezeStaticObjectMatrices(shelf);
 
   return { shelf, shelfBody, shelfColliders, shelfBox };
 }
@@ -1096,8 +1121,8 @@ async function loadPrizeType(config, loader) {
 
   prizeModel.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = enableRealtimeShadows;
+      child.receiveShadow = enableRealtimeShadows;
     }
   });
 
@@ -1106,17 +1131,11 @@ async function loadPrizeType(config, loader) {
 
 async function loadPrizeTypes() {
   const loader = new GLTFLoader();
-  const loadedPrizeTypes = [];
+  const loadedPrizeTypes = await Promise.all(
+    prizeTypeConfigs.map((config) => loadPrizeType(config, loader)),
+  );
 
-  for (const config of prizeTypeConfigs) {
-    const prizeType = await loadPrizeType(config, loader);
-
-    if (prizeType) {
-      loadedPrizeTypes.push(prizeType);
-    }
-  }
-
-  return loadedPrizeTypes;
+  return loadedPrizeTypes.filter(Boolean);
 }
 
 function getRandomArrayItem(items) {
@@ -1324,8 +1343,10 @@ function updatePrizeRespawns(
 ) {
   if (prizeTypes.length === 0) {
     respawnQueue.length = 0;
-    return;
+    return false;
   }
+
+  let spawnedPrize = false;
 
   for (let index = respawnQueue.length - 1; index >= 0; index -= 1) {
     const respawn = respawnQueue[index];
@@ -1356,8 +1377,11 @@ function updatePrizeRespawns(
       prizePool,
       prizeColliderHandleMap,
     ));
+    spawnedPrize = true;
     respawnQueue.splice(index, 1);
   }
+
+  return spawnedPrize;
 }
 
 function createScoreState() {
@@ -1461,11 +1485,12 @@ function checkDroppedPrizes(
 ) {
   for (let index = prizes.length - 1; index >= 0; index -= 1) {
     const prize = prizes[index];
-    const prizeBottomY = getPrizeBottomY(prize);
 
     if (!prize.isDynamic) {
       continue;
     }
+
+    const prizeBottomY = getPrizeBottomY(prize);
 
     if (prizeBottomY <= prizeDropScoreHeight) {
       scoreState.points += 1;
@@ -1498,6 +1523,18 @@ function handleCollisionEvents(
 
 function syncPrizeMeshes(prizes) {
   prizes.forEach((prize) => {
+    if (!prize.isDynamic) {
+      return;
+    }
+
+    const isSleeping = typeof prize.prizeBody.isSleeping === 'function'
+      ? prize.prizeBody.isSleeping()
+      : false;
+
+    if (isSleeping) {
+      return;
+    }
+
     const position = prize.prizeBody.translation();
     const rotation = prize.prizeBody.rotation();
 
@@ -1515,7 +1552,13 @@ function syncRingTraceArea() {
 }
 
 function setupRingUi() {
-  const syncWhenReady = () => requestAnimationFrame(syncRingTraceArea);
+  let ringState = null;
+  const syncWhenReady = () => requestAnimationFrame(() => {
+    syncRingTraceArea();
+    if (ringState) {
+      ringState.needsRender = true;
+    }
+  });
 
   if (ringImage.complete) {
     syncWhenReady();
@@ -1529,6 +1572,16 @@ function setupRingUi() {
   const dragStartAim = new THREE.Vector2(0, 0);
   const dragStartPointer = new THREE.Vector2(0, 0);
   const tracedPoints = [];
+  ringState = {
+    element: ringUi,
+    image: ringImage,
+    traceArea: ringTraceArea,
+    aimDirection,
+    aimLimits: gunAimLimits,
+    tracedPoints,
+    syncTraceArea: syncWhenReady,
+    needsRender: true,
+  };
   const clampAimDirection = (aim) => {
     aim.x = THREE.MathUtils.clamp(aim.x, -1, 1);
     aim.y = THREE.MathUtils.clamp(aim.y, -1, 1);
@@ -1546,6 +1599,7 @@ function setupRingUi() {
 
     clampAimDirection(nextAim);
     aimDirection.copy(nextAim);
+    ringState.needsRender = true;
     tracedPoints.push({
       x: localX,
       y: localY,
@@ -1577,15 +1631,7 @@ function setupRingUi() {
   ringTraceArea.addEventListener('pointerup', finishAim);
   ringTraceArea.addEventListener('pointercancel', finishAim);
 
-  return {
-    element: ringUi,
-    image: ringImage,
-    traceArea: ringTraceArea,
-    aimDirection,
-    aimLimits: gunAimLimits,
-    tracedPoints,
-    syncTraceArea: syncWhenReady,
-  };
+  return ringState;
 }
 
 function applyGunAim(gun, aimDirection) {
@@ -1603,6 +1649,8 @@ function createShootCooldown() {
   return {
     duration: shootCooldownDuration,
     remaining: 0,
+    lastGaugeProgress: null,
+    lastButtonDisabled: null,
   };
 }
 
@@ -1618,7 +1666,10 @@ function updateCooldownGauge(cooldown, { animate = true } = {}) {
     cooldownGaugeFill.style.transition = 'none';
   }
 
-  cooldownGaugeFill.style.transform = `scaleX(${clampedProgress})`;
+  if (cooldown.lastGaugeProgress !== clampedProgress) {
+    cooldownGaugeFill.style.transform = `scaleX(${clampedProgress})`;
+    cooldown.lastGaugeProgress = clampedProgress;
+  }
 
   if (!animate) {
     // クールダウン開始時だけは、満タンから0へ戻る動きを見せずに即0へ切り替える。
@@ -1626,8 +1677,13 @@ function updateCooldownGauge(cooldown, { animate = true } = {}) {
     cooldownGaugeFill.style.transition = '';
   }
 
-  shootButton.disabled = isShootCoolingDown(cooldown);
-  shootButton.setAttribute('aria-disabled', String(shootButton.disabled));
+  const isDisabled = isShootCoolingDown(cooldown);
+
+  if (cooldown.lastButtonDisabled !== isDisabled) {
+    shootButton.disabled = isDisabled;
+    shootButton.setAttribute('aria-disabled', String(isDisabled));
+    cooldown.lastButtonDisabled = isDisabled;
+  }
 }
 
 function startShootCooldown(cooldown) {
@@ -1689,7 +1745,7 @@ async function init() {
     camera.aspect = getViewportAspect();
     camera.updateProjectionMatrix();
     setRendererViewport(renderer);
-    renderer.shadowMap.needsUpdate = true;
+    ring.needsRender = true;
   }
 
   window.addEventListener('resize', onResize);
@@ -1712,41 +1768,60 @@ async function init() {
     startShootCooldown(shootCooldown);
   });
 
-  let frameCount = 0;
-
   function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
-    world.timestep = delta;
-    world.step(eventQueue);
-    handleCollisionEvents(eventQueue, bulletColliderHandleMap, prizeColliderHandleMap);
-    applyGunAim(gun, ring.aimDirection);
-    tickShootCooldown(shootCooldown, delta);
-    syncBulletMeshes(bullets);
-    checkDroppedPrizes(
-      scene,
-      world,
-      prizes,
-      pointPopups,
-      scoreState,
-      prizeRespawnQueue,
-      prizePool,
-    );
-    updatePrizeRespawns(
-      scene,
-      world,
-      prizes,
-      prizeTypes,
-      prizeRespawnQueue,
-      delta,
-      prizeColliderHandleMap,
-      prizePool,
-    );
-    syncPrizeMeshes(prizes);
-    pruneBullets(scene, world, bullets, delta, bulletColliderHandleMap);
-    updatePointPopups(pointPopups);
-    frameCount += 1;
-    renderer.shadowMap.needsUpdate = frameCount % shadowUpdateInterval === 0;
-    renderer.render(scene, camera);
+    const hasPhysicsWork = hasActiveBullets(bullets) || hasAwakeDynamicPrizes(prizes);
+    let shouldRender = hasPendingVisualWork(bullets, prizes, ring);
+
+    if (hasPhysicsWork) {
+      world.timestep = delta;
+      world.step(eventQueue);
+      handleCollisionEvents(eventQueue, bulletColliderHandleMap, prizeColliderHandleMap);
+      syncBulletMeshes(bullets);
+      checkDroppedPrizes(
+        scene,
+        world,
+        prizes,
+        pointPopups,
+        scoreState,
+        prizeRespawnQueue,
+        prizePool,
+      );
+      syncPrizeMeshes(prizes);
+      pruneBullets(scene, world, bullets, delta, bulletColliderHandleMap);
+      shouldRender = true;
+    }
+
+    if (prizeRespawnQueue.length > 0) {
+      shouldRender = updatePrizeRespawns(
+        scene,
+        world,
+        prizes,
+        prizeTypes,
+        prizeRespawnQueue,
+        delta,
+        prizeColliderHandleMap,
+        prizePool,
+      ) || shouldRender;
+    }
+
+    if (ring.needsRender) {
+      applyGunAim(gun, ring.aimDirection);
+    }
+
+    if (isShootCoolingDown(shootCooldown)) {
+      tickShootCooldown(shootCooldown, delta);
+    }
+
+    if (pointPopups.length > 0) {
+      updatePointPopups(pointPopups);
+    }
+
+    if (shouldRender) {
+      renderer.render(scene, camera);
+      ring.needsRender = false;
+    }
+
     requestAnimationFrame(animate);
   }
 
