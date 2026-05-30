@@ -156,13 +156,14 @@ const prizeLinearDamping = 0.35;
 const prizeAngularDamping = 0.8;
 const prizeHitVelocityMultiplier = 0.16;
 const prizeDropScoreHeight = 0.3;
-const maxRendererPixelRatio = 0.5;
+// GPU負荷を抑えながら、輪郭がぼやけすぎない画質を保つ。
+const maxRendererPixelRatio = 0.75;
 // 低性能な学校PCでも安定しやすいよう、描画と物理更新を24fpsに抑える。
 const targetFrameRate = 24;
 const targetFrameDuration = 1000 / targetFrameRate;
 const maxFrameDelta = 0.05;
 const enableRealtimeShadows = false;
-const textureAnisotropy = 1;
+const textureAnisotropy = 2;
 const pointPopupLifetime = 0.85;
 const pointPopupSize = 'min(28vmin, 190px)';
 const pointPopupScreenPadding = 96;
