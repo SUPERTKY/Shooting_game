@@ -21,6 +21,9 @@ const treePaths = {
   tree2: './tree/tree_2.glb',
 };
 const maxPrizeCount = 10;
+// 軽量なモデルを標準で使い、初期ロードとGPUメモリ使用量を抑える。
+// 景品を増やしたい場合は Prize_1.glb から Prize_10.glb までの番号を追加できる。
+const enabledPrizeTypeIds = [3, 4, 6, 8, 10];
 const defaultPrizeSize = 0.15;
 const defaultPrizeSlotSizeScale = 1;
 const defaultPrizeHeightOffset = 0;
@@ -126,14 +129,12 @@ const prizeHeightOffsetByTypeId = {
   9: -0.1,
   10: -0.12,
 };
-const prizeTypeConfigs = Array.from({ length: maxPrizeCount }, (_, index) => {
-  const id = index + 1;
-
-  return createPrizeTypeConfig(id, {
+const prizeTypeConfigs = enabledPrizeTypeIds.map((id) => (
+  createPrizeTypeConfig(id, {
     size: prizeSizeByTypeId[id] ?? defaultPrizeSize,
     heightOffset: prizeHeightOffsetByTypeId[id] ?? defaultPrizeHeightOffset,
-  });
-});
+  })
+));
 // sizeScale は配置スロットごとの倍率です。
 // 同じ景品タイプでも置き場所ごとに大きさを変えたい場合に指定します。
 const prizeSlotConfigs = [
@@ -153,6 +154,10 @@ const prizeAngularDamping = 0.8;
 const prizeHitVelocityMultiplier = 0.16;
 const prizeDropScoreHeight = 0.3;
 const maxRendererPixelRatio = 0.75;
+// 低性能な学校PCでも安定しやすいよう、描画と物理更新を30fpsに抑える。
+const targetFrameRate = 30;
+const targetFrameDuration = 1000 / targetFrameRate;
+const maxFrameDelta = 0.05;
 const enableRealtimeShadows = false;
 const textureAnisotropy = 1;
 const pointPopupLifetime = 0.85;
@@ -206,7 +211,6 @@ const tentCollisionGroup = createCollisionGroup(
   collisionGroups.tent,
   collisionGroups.token,
 );
-const clock = new THREE.Clock();
 const prizeBottomMatrix = new THREE.Matrix4();
 const prizeBottomPosition = new THREE.Vector3();
 const prizeBottomQuaternion = new THREE.Quaternion();
@@ -1765,8 +1769,25 @@ async function init() {
     startActionCooldown(actionCooldown);
   });
 
-  function animate() {
-    const delta = Math.min(clock.getDelta(), 0.05);
+  let previousFrameTime = null;
+
+  function animate(timestamp) {
+    requestAnimationFrame(animate);
+
+    if (previousFrameTime === null) {
+      previousFrameTime = timestamp - targetFrameDuration;
+    }
+
+    const elapsed = timestamp - previousFrameTime;
+
+    if (elapsed < targetFrameDuration) {
+      return;
+    }
+
+    // 余った時間を次のフレームへ繰り越し、端末ごとの差が出にくい30fpsを保つ。
+    previousFrameTime = timestamp - (elapsed % targetFrameDuration);
+
+    const delta = Math.min(elapsed / 1000, maxFrameDelta);
     const hasPhysicsWork = hasActiveTokens(tokens) || hasAwakeDynamicPrizes(prizes);
     let shouldRender = hasPendingVisualWork(tokens, prizes, ring);
 
@@ -1819,10 +1840,9 @@ async function init() {
       ring.needsRender = false;
     }
 
-    requestAnimationFrame(animate);
   }
 
-  animate();
+  requestAnimationFrame(animate);
 
   // 今後の体験コンテンツ初期化で使えるように、最小構成を公開しておく。
   window.boothRuntime = {
