@@ -16,7 +16,7 @@ npm install
 npm run dev
 ```
 
-ターミナルに表示された URL にブラウザでアクセスしてください。`index.html` を直接開いたり、リポジトリのルートをそのまま静的サイトとして公開したりしないでください。ソースコードでは Vite が変換する npm パッケージ名を使っているため、変換前の `src/main.js` をブラウザが直接読み込むと `Failed to resolve module specifier "three"` というエラーになります。
+ターミナルに表示された URL にブラウザでアクセスしてください。`index.html` を直接開くのではなく、必ず HTTP サーバー経由で開いてください。リポジトリのルートをそのまま静的サイトとして公開した場合も、`index.html` の import map により npm パッケージ名を解決できるため、`Failed to resolve module specifier "three"` にはなりません。ただし、この方法では起動時に unpkg CDN へ接続します。発表用・オフライン用には、次の手順で作成した `dist/` を公開してください。
 
 ## 発表用ファイルの作成
 
