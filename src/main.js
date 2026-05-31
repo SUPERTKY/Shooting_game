@@ -8,6 +8,9 @@ const ringImage = document.querySelector('#target-ring-image');
 const ringTraceArea = document.querySelector('#target-ring-trace-area');
 const actionButton = document.querySelector('#action-button');
 const cooldownGaugeFill = document.querySelector('#cooldown-gauge-fill');
+const loadingStatus = document.querySelector('#loading-status');
+const loadingStatusMessage = document.querySelector('#loading-status-message');
+const reloadButton = document.querySelector('#reload-button');
 const wallPath = './assets/wall.glb';
 const launcherPath = './assets/launcher.glb';
 const tokenPath = './assets/token.glb';
@@ -16,6 +19,8 @@ const tablePath = './assets/Table.glb';
 const groundPath = './assets/Ground.glb';
 const shelfPath = './assets/shelf.glb';
 const tentPath = './assets/Tent.glb';
+const assetLoadMaxAttempts = 3;
+const assetLoadRetryBaseDelay = 700;
 const treePaths = {
   tree1: './tree/tree_1.glb',
   tree2: './tree/tree_2.glb',
@@ -311,6 +316,55 @@ function hasPendingVisualWork(tokens, prizes, ring) {
     || ring.needsRender;
 }
 
+function wait(delay) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delay);
+  });
+}
+
+function showLoadingStatus(message, { canReload = false } = {}) {
+  loadingStatusMessage.textContent = message;
+  reloadButton.hidden = !canReload;
+  loadingStatus.hidden = false;
+}
+
+function hideLoadingStatus() {
+  loadingStatus.hidden = true;
+}
+
+async function retryLoad(task, label, { maxAttempts = assetLoadMaxAttempts } = {}) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      showLoadingStatus(`${label}を読み込んでいます…`);
+
+      return await task();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === maxAttempts) {
+        break;
+      }
+
+      const retryDelay = assetLoadRetryBaseDelay * (2 ** (attempt - 1));
+      console.warn(`${label}の読み込みに失敗しました。再試行します (${attempt}/${maxAttempts})。`, error);
+      showLoadingStatus(`${label}の取得が不安定です。自動で再試行します (${attempt}/${maxAttempts})…`);
+      await wait(retryDelay);
+    }
+  }
+
+  throw lastError;
+}
+
+function loadAsset(loader, path, label = path, options) {
+  return retryLoad(() => loader.loadAsync(path), label, options);
+}
+
+reloadButton.addEventListener('click', () => {
+  window.location.reload();
+});
+
 function optimizeTextureMemory(texture, {
   useMipmaps = true,
   anisotropy = textureAnisotropy,
@@ -345,7 +399,7 @@ function optimizeModelTextureMemory(root) {
 
 async function loadPointTexture() {
   const textureLoader = new THREE.TextureLoader();
-  const pointTexture = await textureLoader.loadAsync(pointImagePath);
+  const pointTexture = await loadAsset(textureLoader, pointImagePath, '得点画像');
   pointTexture.colorSpace = THREE.SRGBColorSpace;
   optimizeTextureMemory(pointTexture, { useMipmaps: false });
 
@@ -354,7 +408,7 @@ async function loadPointTexture() {
 
 async function configureBackground(scene) {
   const textureLoader = new THREE.TextureLoader();
-  const skyTexture = await textureLoader.loadAsync(skyTexturePath);
+  const skyTexture = await loadAsset(textureLoader, skyTexturePath, '背景画像');
   skyTexture.colorSpace = THREE.SRGBColorSpace;
   optimizeTextureMemory(skyTexture, { useMipmaps: false });
   scene.background = skyTexture;
@@ -426,7 +480,7 @@ async function loadGround(scene, world) {
   }
 
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(groundPath);
+  const gltf = await loadAsset(loader, groundPath, '地面モデル');
   const ground = gltf.scene;
   optimizeModelTextureMemory(ground);
   ground.name = 'visual-ground';
@@ -500,7 +554,7 @@ function createLauncherLaunchPointAnchor(launcherScale) {
 
 async function loadTable(camera) {
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(tablePath);
+  const gltf = await loadAsset(loader, tablePath, 'テーブルモデル');
   const tableModel = gltf.scene;
   optimizeModelTextureMemory(tableModel);
   const table = new THREE.Group();
@@ -538,7 +592,7 @@ async function loadTreeTemplate(path, loader, templateCache) {
     return templateCache.get(path);
   }
 
-  const gltf = await loader.loadAsync(path);
+  const gltf = await loadAsset(loader, path, '木のモデル');
   const treeTemplate = gltf.scene;
   optimizeModelTextureMemory(treeTemplate);
   templateCache.set(path, treeTemplate);
@@ -596,7 +650,7 @@ async function loadTrees(scene) {
 
 async function loadTent(scene, world) {
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(tentPath);
+  const gltf = await loadAsset(loader, tentPath, 'テントモデル');
   const tent = gltf.scene;
   optimizeModelTextureMemory(tent);
   tent.name = 'visual-tent';
@@ -638,7 +692,7 @@ async function loadTent(scene, world) {
 
 async function loadLauncher(camera) {
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(launcherPath);
+  const gltf = await loadAsset(loader, launcherPath, 'ランチャーモデル');
   const launcherModel = gltf.scene;
   optimizeModelTextureMemory(launcherModel);
   const launcher = new THREE.Group();
@@ -675,7 +729,7 @@ async function loadLauncher(camera) {
 
 async function loadTokenTemplate() {
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(tokenPath);
+  const gltf = await loadAsset(loader, tokenPath, 'トークンモデル');
   const tokenModel = gltf.scene;
   optimizeModelTextureMemory(tokenModel);
   tokenModel.name = 'token-template';
@@ -1003,7 +1057,7 @@ function createModelTrimeshColliders(
 
 async function loadWall(scene, world) {
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(wallPath);
+  const gltf = await loadAsset(loader, wallPath, '壁モデル');
   const wall = gltf.scene;
   optimizeModelTextureMemory(wall);
   wall.name = 'collision-wall';
@@ -1040,7 +1094,7 @@ async function loadWall(scene, world) {
 
 async function loadShelf(scene, world, wallBox) {
   const loader = new GLTFLoader();
-  const gltf = await loader.loadAsync(shelfPath);
+  const gltf = await loadAsset(loader, shelfPath, '棚モデル');
   const shelf = gltf.scene;
   optimizeModelTextureMemory(shelf);
   shelf.name = 'collision-shelf';
@@ -1144,7 +1198,7 @@ async function loadPrizeType(config, loader) {
   let gltf;
 
   try {
-    gltf = await loader.loadAsync(config.path);
+    gltf = await loadAsset(loader, config.path, `景品モデル ${config.id}`);
   } catch (error) {
     console.warn(`${config.path} が見つからない、または読み込めないためスキップします。`, error);
 
@@ -1755,7 +1809,8 @@ function tickActionCooldown(cooldown, delta) {
 }
 
 async function init() {
-  await RAPIER.init();
+  showLoadingStatus('ゲームを準備しています…');
+  await retryLoad(() => RAPIER.init(), '物理エンジン');
 
   const scene = new THREE.Scene();
 
@@ -1895,6 +1950,8 @@ async function init() {
   requestAnimationFrame(animate);
 
   // 今後の体験コンテンツ初期化で使えるように、最小構成を公開しておく。
+  hideLoadingStatus();
+
   window.boothRuntime = {
     THREE,
     RAPIER,
@@ -1935,4 +1992,7 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
+  showLoadingStatus('読み込みを完了できませんでした。通信状態を確認して、もう一度お試しください。', {
+    canReload: true,
+  });
 });
