@@ -94,6 +94,41 @@
         pointer-events: none;
       }
 
+      #loading-status {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+        background: rgb(9 13 22 / 88%);
+        text-align: center;
+      }
+
+      #loading-status[hidden] {
+        display: none;
+      }
+
+      #loading-status-panel {
+        max-width: 30rem;
+        padding: 1rem 1.25rem;
+        border: 1px solid rgb(155 209 255 / 45%);
+        border-radius: 0.75rem;
+        background: rgb(17 23 34 / 95%);
+      }
+
+      #reload-button {
+        margin-top: 0.75rem;
+        padding: 0.55rem 1rem;
+        border: 1px solid #9bd1ff;
+        border-radius: 999px;
+        color: #111722;
+        background: #9bd1ff;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+      }
+
       #cooldown-gauge-fill {
         width: 100%;
         height: 100%;
@@ -122,6 +157,12 @@
     </style>
   </head>
   <body>
+    <div id="loading-status" role="status" aria-live="polite">
+      <div id="loading-status-panel">
+        <div id="loading-status-message">ゲームを準備しています…</div>
+        <button id="reload-button" type="button" hidden>もう一度読み込む</button>
+      </div>
+    </div>
     <div id="booth-canvas" aria-label="3D school fair booth view"></div>
     <div id="target-ring-ui" aria-label="リングのなぞれる場所">
       <img id="target-ring-image" src="./image/ring.png" alt="Target ring" draggable="false" />
