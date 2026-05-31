@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 // Keep this list aligned with the low-load runtime settings in src/main.js.
@@ -22,7 +22,6 @@ const staticFiles = [
   'image/sky.jpg',
 ];
 
-await rm('dist', { recursive: true, force: true });
 await mkdir('dist', { recursive: true });
 
 await Promise.all(staticFiles.map(async (file) => {
