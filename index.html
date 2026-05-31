@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="学校発表向けの縁日風3D景品体験です。" />
     <title>School Fair Prize Booth</title>
+    <!--
+      Vite replaces these package imports in production builds. The import map also
+      lets an unbuilt checkout run when index.html is served by a static HTTP server.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.180.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.180.0/examples/jsm/",
+          "@dimforge/rapier3d-compat": "https://unpkg.com/@dimforge/rapier3d-compat@0.17.3/rapier.es.js"
+        }
+      }
+    </script>
     <script type="module" src="./src/main.js"></script>
     <style>
       body {
